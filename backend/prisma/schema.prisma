@@ -1,0 +1,210 @@
+// Schema do banco de dados - E Tenho Ditto Pizzaria
+// Suporta PostgreSQL (produção) e SQLite (desenvolvimento local)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum FlavorType {
+  SALGADA
+  DOCE
+}
+
+enum ProductCategory {
+  COMBO
+  BEBIDA
+  ESPECIAL
+}
+
+enum DeliveryType {
+  ENTREGA
+  RETIRADA
+}
+
+enum OrderStatus {
+  PENDENTE
+  CONFIRMADO
+  EM_PREPARO
+  SAIU_PARA_ENTREGA
+  ENTREGUE
+  CANCELADO
+}
+
+/// Tamanhos de pizza "Monte a sua" (Pequena, Média, Grande)
+model PizzaSize {
+  id           Int      @id @default(autoincrement())
+  name         String
+  slug         String   @unique
+  slices       Int
+  maxFlavors   Int
+  servesPeople Int
+  price        Decimal  @db.Decimal(10, 2)
+  imageUrl     String?
+  description  String?
+  active       Boolean  @default(true)
+  order        Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("pizza_sizes")
+}
+
+/// Sabores disponíveis (salgados e doces)
+model Flavor {
+  id          Int        @id @default(autoincrement())
+  name        String
+  description String?
+  type        FlavorType
+  extraPrice  Decimal    @db.Decimal(10, 2) @default(0)
+  imageUrl    String?
+  active      Boolean    @default(true)
+  order       Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("flavors")
+}
+
+/// Bordas recheadas
+model Border {
+  id     Int        @id @default(autoincrement())
+  name   String
+  price  Decimal    @db.Decimal(10, 2)
+  type   FlavorType
+  active Boolean    @default(true)
+  order  Int        @default(0)
+
+  @@map("borders")
+}
+
+/// Produtos fixos: combos, pizza vulcão, bebidas etc (não configuráveis)
+model Product {
+  id           Int             @id @default(autoincrement())
+  name         String
+  description  String?
+  price        Decimal         @db.Decimal(10, 2)
+  servesPeople Int?
+  imageUrl     String?
+  category     ProductCategory
+  active       Boolean         @default(true)
+  order        Int             @default(0)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@map("products")
+}
+
+/// Pedido feito por um cliente
+model Order {
+  id            Int           @id @default(autoincrement())
+  customerName  String
+  phone         String        // Criptografado no banco (de/encrypt no app)
+  address       String?       // Criptografado no banco
+  deliveryType  DeliveryType  @default(ENTREGA)
+  paymentMethod String
+  notes         String?
+  status        OrderStatus   @default(PENDENTE)
+  deliveryFee   Decimal       @db.Decimal(10, 2) @default(0)
+  totalPrice    Decimal       @db.Decimal(10, 2)
+  items         OrderItem[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@map("orders")
+}
+
+/// Item de um pedido (snapshot dos dados no momento da compra)
+model OrderItem {
+  id           Int      @id @default(autoincrement())
+  orderId      Int
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  itemName     String
+  itemType     String // MONTAVEL | COMBO | BEBIDA | ESPECIAL
+  flavors      Json? // array de nomes dos sabores escolhidos
+  borderName   String?
+  quantity     Int      @default(1)
+  unitPrice    Decimal  @db.Decimal(10, 2)
+  subtotal     Decimal  @db.Decimal(10, 2)
+  observations String?
+
+  @@map("order_items")
+}
+
+/// Usuário administrador (painel de gestão)
+model Admin {
+  id                 Int         @id @default(autoincrement())
+  name               String
+  email              String      @unique
+  passwordHash       String
+  role               String      @default("ADMIN") // SUPER_ADMIN, ADMIN, VIEWER
+  
+  // 2FA - TOTP
+  totpSecret         String?     // Secret para geração de TOTP (Google Authenticator)
+  totpEnabled        Boolean     @default(false)
+  backupCodes        String?     // JSON array de backup codes (criptografado)
+  
+  // Auditoria
+  lastLoginAt        DateTime?
+  lastLoginIp        String?
+  auditLogs          AuditLog[]  // Relação com logs de auditoria
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  @@map("admins")
+}
+
+/// Log de auditoria - rastreia todas as mudanças no catálogo
+/// Permite investigar: quem mudou, o quê, quando, de qual IP
+model AuditLog {
+  id              Int      @id @default(autoincrement())
+  table           String   // "PizzaSize", "Flavor", "Border", "Product"
+  recordId        Int      // ID do registro modificado
+  action          String   // "CREATE", "UPDATE", "DELETE"
+  adminId         Int      // ID do admin que fez a mudança
+  admin           Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  
+  // Snapshots antes/depois (JSON para rastreabilidade completa)
+  before          Json?    // Estado anterior (null se CREATE)
+  after           Json?    // Estado novo (null se DELETE)
+  
+  // Contexto da mudança
+  ip              String   // IP do cliente
+  userAgent       String?  // Browser/client info
+  timestamp       DateTime @default(now())
+  
+  createdAt       DateTime @default(now())
+
+  @@index([table, recordId])
+  @@index([adminId, timestamp])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
+
+/// Configurações gerais da loja (dados que o cliente pode editar)
+model StoreSettings {
+  id              Int      @id @default(1)
+  whatsapp        String   // Criptografado no banco
+  phone           String   // Criptografado no banco
+  address         String   // Criptografado no banco
+  city            String
+  state           String
+  zipCode         String
+  ifoodUrl        String?
+  instagramUrl    String?
+  facebookUrl     String?
+  openingHours    Json
+  minDeliveryFee  Decimal  @db.Decimal(10, 2) @default(10)
+  maxDeliveryFee  Decimal  @db.Decimal(10, 2) @default(20)
+  minDeliveryTime Int      @default(40)
+  maxDeliveryTime Int      @default(70)
+  isOpen          Boolean  @default(true)
+  updatedAt       DateTime @updatedAt
+
+  @@map("store_settings")
+}

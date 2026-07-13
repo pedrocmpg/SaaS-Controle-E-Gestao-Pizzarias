@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "Bash(nohup npm run dev)",
+      "Bash(disown)",
+      "Bash(curl -s -c /tmp/claude-1000/-home-pedrocmpg-Projetos-FREELANCE-E-TENHO-DITTO-PIZZARIA/6c3fef2a-8f29-40e9-852a-45689841f663/scratchpad/cookies.txt -X POST http://localhost:3333/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"admin@etenhoditto.com.br\",\"password\":\"Admin@Pizza2024!Segura\"}')",
+      "Bash(node -e \"console.log\\(require\\('joi/package.json'\\).version\\)\")"
+    ]
+  }
+}
