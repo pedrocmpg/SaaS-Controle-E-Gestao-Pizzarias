@@ -51,15 +51,15 @@ export default function Home() {
 
             {/* Headline - Com fonte serif */}
             <h1 className="font-serif text-5xl md:text-6xl lg:text-7xl font-black text-gray-900 leading-tight mb-2">
-              E Tenho Ditto
+              Sua Marca
             </h1>
             <h2 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-red-600 mb-4">
-              Pizzaria
+              Aqui
             </h2>
 
             {/* Descrição */}
             <p className="text-gray-700 text-base md:text-lg max-w-md mb-6 leading-relaxed">
-              Pizzas artesanais em Bento Gonçalves e Garibaldi. Monte a sua, escolha uma borda recheada e receba em casa.
+              Pizzas artesanais na sua região. Monte a sua, escolha uma borda recheada e receba em casa.
             </p>
 
             {/* Info de entrega */}
@@ -74,7 +74,7 @@ export default function Home() {
               </div>
               <div className="flex items-center gap-2 text-gray-700">
                 <span className="text-lg">📍</span>
-                <span>Bento Gonçalves, RS</span>
+                <span>{settings.city}, {settings.state}</span>
               </div>
             </div>
 
@@ -84,7 +84,7 @@ export default function Home() {
                 Monte sua pizza
               </Link>
               <a
-                href="https://www.ifood.com.br/delivery/bento-goncalves-rs/e-tenho-ditto-pizzaria---bento-goncalves-e-garibaldi-humaita/9e21dfe2-99f6-4abc-9b51-3e4433336bfb"
+                href={settings.ifoodUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn-outline border-2 border-gray-400 text-gray-700 font-bold py-3 px-6 rounded-lg hover:bg-gray-100 transition-colors"
@@ -110,40 +110,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Destaques */}
-      <section className="bg-brand-50 py-16">
-        <div className="container-app">
-          <h2 className="section-title text-center">Destaques da Casa</h2>
-          <div className="mt-10 grid gap-6 md:grid-cols-2">
-            <div className="card p-8 flex flex-col justify-between bg-gradient-to-br from-red-600 to-red-700 text-white">
-              <div>
-                <h3 className="text-2xl font-bold">Combo Família</h3>
-                <p className="mt-2 text-red-100">
-                  1 Pizza Grande (4 sabores) + 1 Pizza Broto por apenas R$ 29,90
-                </p>
-              </div>
-              <p className="mt-6 text-3xl font-extrabold">R$ 134,90</p>
-              <Link to="/cardapio" className="mt-4 btn-secondary bg-white text-red-600 hover:bg-red-50 w-fit font-bold">
-                Pedir agora
-              </Link>
-            </div>
-
-            <div className="card p-8 flex flex-col justify-between bg-gradient-to-br from-gray-800 to-gray-900 text-white">
-              <div>
-                <h3 className="text-2xl font-bold">Pizza Vulcão 🌋</h3>
-                <p className="mt-2 text-gray-200">
-                  Novidade! Pizza Grande com borda vulcão e até 3 sabores.
-                </p>
-              </div>
-              <p className="mt-6 text-3xl font-extrabold">R$ 142,00</p>
-              <Link to="/cardapio" className="mt-4 btn-secondary bg-white text-gray-900 hover:bg-gray-100 w-fit font-bold">
-                Pedir agora
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* Localização */}
       <section className="container-app py-16 grid md:grid-cols-2 gap-10 items-center">
         <div>
@@ -152,11 +118,8 @@ export default function Home() {
             {settings.address} - {settings.city}, {settings.state} - CEP{" "}
             {settings.zipCode}
           </p>
-          <p className="mt-2 text-gray-600">Bairro Humaitá</p>
           <a
-            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-              `${settings.address}, ${settings.city}, ${settings.state}`
-            )}`}
+            href="https://www.google.com/maps/search/?api=1&query=Praça+da+Sé,+São+Paulo,+SP"
             target="_blank"
             rel="noopener noreferrer"
             className="btn-outline mt-6 inline-block"
@@ -166,12 +129,10 @@ export default function Home() {
         </div>
         <div className="rounded-2xl overflow-hidden shadow-card h-72">
           <iframe
-            title="Mapa - E Tenho Ditto Pizzaria"
+            title="Mapa"
             className="w-full h-full border-0"
             loading="lazy"
-            src={`https://www.google.com/maps?q=${encodeURIComponent(
-              `${settings.address}, ${settings.city}, ${settings.state}`
-            )}&output=embed`}
+            src="https://www.google.com/maps?q=Pra%C3%A7a+da+S%C3%A9%2C+S%C3%A3o+Paulo%2C+SP&output=embed"
           />
         </div>
       </section>

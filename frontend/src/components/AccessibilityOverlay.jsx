@@ -15,7 +15,7 @@ export function AccessibilityOverlay() {
 
       {/* Screen reader only text */}
       <div className="sr-only" aria-live="polite" aria-atomic="true">
-        Bem-vindo ao site da E Tenho Ditto Pizzaria
+        Bem-vindo ao site da Sua Marca Aqui
       </div>
     </>
   );

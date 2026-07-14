@@ -14,7 +14,7 @@ export function buildWhatsAppLink(phone, message = "") {
  */
 export function buildOrderMessage({ customerName, items, deliveryType, address, paymentMethod, notes, deliveryFee, subtotal }) {
   const lines = [];
-  lines.push(`*Novo pedido - E Tenho Ditto Pizzaria*`);
+  lines.push(`*Novo pedido - Sua Marca Aqui*`);
   lines.push(`Cliente: ${customerName || "-"}`);
   lines.push("");
   lines.push("*Itens:*");

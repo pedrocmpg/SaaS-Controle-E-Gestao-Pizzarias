@@ -46,7 +46,6 @@ export default function Menu() {
     );
   }
 
-  const combos = catalog.products.filter((p) => p.category === "COMBO" || p.category === "ESPECIAL");
   const drinks = catalog.products.filter((p) => p.category === "BEBIDA");
 
   return (
@@ -81,22 +80,6 @@ export default function Menu() {
           </div>
         ))}
       </div>
-
-      {combos.length > 0 && (
-        <>
-          <h2 className="section-title text-center mt-20 animate-fade-in">Favoritas da Galera</h2>
-          <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {combos.map((product, index) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                onAdd={addItem}
-                index={index}
-              />
-            ))}
-          </div>
-        </>
-      )}
 
       {drinks.length > 0 && (
         <>

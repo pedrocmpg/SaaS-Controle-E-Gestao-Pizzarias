@@ -1,9 +1,9 @@
 export default function About() {
   return (
     <div className="container-app py-16 max-w-3xl">
-      <h1 className="section-title">Sobre a E Tenho Ditto Pizzaria</h1>
+      <h1 className="section-title">Sobre a Sua Marca Aqui</h1>
       <p className="mt-6 text-gray-600 leading-relaxed">
-        A E Tenho Ditto Pizzaria nasceu em Bento Gonçalves com um propósito simples:
+        A Sua Marca Aqui nasceu com um propósito simples:
         servir pizzas que fazem as pessoas dizerem &ldquo;eu já tenho ditto que essa é a
         melhor pizza da cidade&rdquo;. Trabalhamos com massa artesanal de fermentação
         lenta, ingredientes selecionados e um cardápio com mais de 80 sabores entre
@@ -24,8 +24,8 @@ export default function About() {
           <p className="text-sm text-gray-500 mt-1">Massa artesanal</p>
         </div>
         <div className="card p-6">
-          <p className="text-3xl font-extrabold text-accent-600">Bento Gonçalves</p>
-          <p className="text-sm text-gray-500 mt-1">Coração da Serra Gaúcha</p>
+          <p className="text-3xl font-extrabold text-accent-600">Serra Gaúcha</p>
+          <p className="text-sm text-gray-500 mt-1">Sabor local, feito com carinho</p>
         </div>
       </div>
     </div>

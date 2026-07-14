@@ -23,7 +23,7 @@ export default function Footer() {
             <Logo />
           </div>
           <p className="mt-4 text-brand-200 max-w-xs">
-            Pizzas artesanais feitas com carinho em Bento Gonçalves. Peça já e
+            Pizzas artesanais feitas com carinho. Peça já e
             receba com rapidez e sabor!
           </p>
         </div>
@@ -69,7 +69,7 @@ export default function Footer() {
 
       <div className="border-t border-white/10 py-4 text-center text-xs text-brand-300">
         <p>
-          © {new Date().getFullYear()} E Tenho Ditto Pizzaria - HTC Foods LTDA · CNPJ 57.283.987/0001-16
+          © {new Date().getFullYear()} Sua Marca Aqui
         </p>
         <p className="mt-1">
           <Link to="/admin" className="hover:text-white underline">
