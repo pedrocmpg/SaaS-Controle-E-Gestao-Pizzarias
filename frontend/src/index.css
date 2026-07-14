@@ -11,11 +11,11 @@ html {
 
 body {
   @apply font-body text-ink;
-  background-color: #f5f1ec;
+  background-color: #FAF6F0;
 }
 
 h1, h2, h3, h4 {
-  @apply font-display;
+  @apply font-display font-semibold;
 }
 
 /* Scrollbar mais discreta */
@@ -23,7 +23,7 @@ h1, h2, h3, h4 {
   width: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  background: theme("colors.brand.400");
+  background: theme("colors.ember.300");
   border-radius: 8px;
 }
 
@@ -94,24 +94,27 @@ h1, h2, h3, h4 {
 
 @layer components {
   .bg-page {
-    @apply bg-[#f5f1ec];
+    @apply bg-[#FAF6F0];
   }
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full bg-accent-500 text-white font-semibold px-6 py-3 shadow-card transition hover:bg-accent-600 active:scale-95;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-ember-500 text-white font-semibold px-6 py-3 transition hover:bg-ember-600 active:scale-95;
   }
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full bg-brand-700 text-white font-semibold px-6 py-3 shadow-card transition hover:bg-brand-800 active:scale-95;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-char text-flour font-semibold px-6 py-3 transition hover:bg-char/90 active:scale-95;
   }
   .btn-outline {
-    @apply inline-flex items-center justify-center gap-2 rounded-full border-2 border-brand-600 text-brand-700 font-semibold px-6 py-3 transition hover:bg-brand-50 active:scale-95;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border-2 border-char text-char font-semibold px-6 py-3 transition hover:bg-flour-2 active:scale-95;
   }
   .section-title {
-    @apply text-3xl md:text-4xl font-bold text-brand-900;
+    @apply text-3xl md:text-4xl font-display font-semibold text-char;
   }
   .card {
-    @apply bg-white rounded-2xl shadow-card border border-black/5 overflow-hidden;
+    @apply bg-white rounded-2xl border border-[#EAE1D3] overflow-hidden;
   }
   .container-app {
     @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+  .font-price {
+    @apply font-mono font-medium;
   }
 }

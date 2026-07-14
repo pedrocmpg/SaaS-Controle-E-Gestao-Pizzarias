@@ -2,21 +2,56 @@
  * Componente visual de preview da pizza sendo montada
  */
 
+// Cores vivas dos sabores (representam ingredientes reais, fora da paleta ember/melt)
+const FLAVOR_COLORS = [
+  "#FF6B6B", // vermelho
+  "#4ECDC4", // teal
+  "#FFE66D", // amarelo
+  "#95E1D3", // mint
+  "#A8E6CF", // verde claro
+  "#FFD3B6", // pêssego
+  "#FFAAA5", // coral
+  "#FF8B94", // rosa
+];
+
+// Versão estática e compacta do círculo de pizza, usada como chamada na home
+export function HeroPizzaPreview({ slices = 4 }) {
+  return (
+    <div className="relative w-20 h-20 sm:w-24 sm:h-24 flex-shrink-0">
+      <svg viewBox="0 0 200 200" className="w-full h-full filter drop-shadow-md animate-pulse-soft">
+        <circle cx="100" cy="100" r="95" fill="#E8C4A0" stroke="#D4A373" strokeWidth="2" />
+        <circle cx="100" cy="100" r="85" fill="#FDD835" opacity="0.9" />
+        {Array.from({ length: slices }).map((_, i) => {
+          const angle = (360 / slices) * i;
+          const color = FLAVOR_COLORS[i % FLAVOR_COLORS.length];
+          const startAngle = (angle * Math.PI) / 180;
+          const sliceAngle = ((360 / slices) * Math.PI) / 180;
+
+          const x1 = 100 + 85 * Math.cos(startAngle);
+          const y1 = 100 + 85 * Math.sin(startAngle);
+          const x2 = 100 + 85 * Math.cos(startAngle + sliceAngle);
+          const y2 = 100 + 85 * Math.sin(startAngle + sliceAngle);
+
+          const largeArc = sliceAngle > Math.PI ? 1 : 0;
+
+          const pathData = [
+            `M 100 100`,
+            `L ${x1} ${y1}`,
+            `A 85 85 0 ${largeArc} 1 ${x2} ${y2}`,
+            `Z`,
+          ].join(" ");
+
+          return <path key={i} d={pathData} fill={color} opacity="0.85" stroke="#fff" strokeWidth="1.5" />;
+        })}
+      </svg>
+    </div>
+  );
+}
+
 export function PizzaPreview({ size, selectedFlavors, selectedBorder }) {
   const flavorCount = selectedFlavors.length;
   const maxFlavors = size.maxFlavors;
-  
-  // Distribui as cores dos sabores no círculo da pizza
-  const colors = [
-    "#FF6B6B", // vermelho
-    "#4ECDC4", // teal
-    "#FFE66D", // amarelo
-    "#95E1D3", // mint
-    "#A8E6CF", // verde claro
-    "#FFD3B6", // pêssego
-    "#FFAAA5", // coral
-    "#FF8B94", // rosa
-  ];
+  const colors = FLAVOR_COLORS;
 
   return (
     <div className="flex flex-col items-center justify-center py-6 sm:py-8">

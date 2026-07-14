@@ -202,22 +202,22 @@ export default function Checkout() {
               <span>
                 {item.quantity}x {item.itemName}
               </span>
-              <span>R$ {(item.unitPrice * item.quantity).toFixed(2)}</span>
+              <span className="font-price">R$ {(item.unitPrice * item.quantity).toFixed(2)}</span>
             </li>
           ))}
         </ul>
         <div className="border-t border-black/5 mt-4 pt-4 space-y-2 text-sm">
           <div className="flex justify-between">
             <span>Subtotal</span>
-            <span>R$ {subtotal.toFixed(2)}</span>
+            <span className="font-price">R$ {subtotal.toFixed(2)}</span>
           </div>
           <div className="flex justify-between">
             <span>Taxa de entrega</span>
-            <span>R$ {deliveryFee.toFixed(2)}</span>
+            <span className="font-price">R$ {deliveryFee.toFixed(2)}</span>
           </div>
-          <div className="flex justify-between font-bold text-brand-900 text-lg pt-2">
+          <div className="flex justify-between font-bold text-char text-lg pt-2">
             <span>Total</span>
-            <span>R$ {total.toFixed(2)}</span>
+            <span className="font-price">R$ {total.toFixed(2)}</span>
           </div>
         </div>
       </aside>

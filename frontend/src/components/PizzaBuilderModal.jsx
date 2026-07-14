@@ -71,7 +71,7 @@ export default function PizzaBuilderModal({ size, flavors, borders, onClose }) {
           </div>
           <button
             onClick={onClose}
-            className="text-2xl leading-none text-gray-400 hover:text-gray-600 transition-smooth active:scale-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent-500 rounded p-1 min-h-[44px] min-w-[44px] flex items-center justify-center flex-shrink-0"
+            className="text-2xl leading-none text-gray-400 hover:text-gray-600 transition-smooth active:scale-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ember-500 rounded p-1 min-h-[44px] min-w-[44px] flex items-center justify-center flex-shrink-0"
             aria-label="Fechar"
           >
             ✕
@@ -119,8 +119,8 @@ export default function PizzaBuilderModal({ size, flavors, borders, onClose }) {
               </div>
 
               {/* Contador de seleção com visual progress */}
-              <div className="flex items-center justify-between px-3 sm:px-4 py-3 bg-gradient-to-r from-accent-50 to-transparent rounded-lg border border-accent-200">
-                <p className="text-xs sm:text-sm font-medium text-accent-700">
+              <div className="flex items-center justify-between px-3 sm:px-4 py-3 bg-gradient-to-r from-ember-50 to-transparent rounded-lg border border-ember-200">
+                <p className="text-xs sm:text-sm font-medium text-ember-700">
                   {selectedFlavors.length} / {size.maxFlavors} sabores
                 </p>
                 <div className="flex gap-1">
@@ -128,7 +128,7 @@ export default function PizzaBuilderModal({ size, flavors, borders, onClose }) {
                     <div
                       key={i}
                       className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                        i < selectedFlavors.length ? "bg-accent-500 scale-125" : "bg-gray-300"
+                        i < selectedFlavors.length ? "bg-ember-500 scale-125" : "bg-gray-300"
                       }`}
                     />
                   ))}
@@ -151,10 +151,10 @@ export default function PizzaBuilderModal({ size, flavors, borders, onClose }) {
                         disabled={isDisabled}
                         className={`text-left p-3 rounded-lg border text-xs transition-all duration-200 transform min-h-[60px] sm:min-h-auto flex flex-col justify-between ${
                           isSelected
-                            ? "border-accent-500 bg-accent-50 ring-2 ring-accent-300 scale-105 shadow-md"
+                            ? "border-ember-500 bg-ember-50 ring-2 ring-ember-300 scale-105"
                             : isDisabled
                             ? "border-gray-100 opacity-40 cursor-not-allowed bg-gray-50"
-                            : "border-gray-200 hover:border-brand-300 hover:shadow-sm hover-lift"
+                            : "border-gray-200 hover:border-ember-300 hover-lift"
                         }`}
                         style={{
                           transitionDelay: isSelected ? `${index * 30}ms` : "0ms",
@@ -169,12 +169,12 @@ export default function PizzaBuilderModal({ size, flavors, borders, onClose }) {
                           )}
                         </div>
                         {Number(flavor.extraPrice) > 0 && (
-                          <span className="text-accent-600 font-bold text-xs mt-1">
+                          <span className="font-price text-ember-600 font-medium text-xs mt-1">
                             +R$ {Number(flavor.extraPrice).toFixed(2)}
                           </span>
                         )}
                         {isSelected && (
-                          <div className="absolute top-1 right-1 w-5 h-5 bg-accent-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                          <div className="absolute top-1 right-1 w-5 h-5 bg-ember-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
                             ✓
                           </div>
                         )}
@@ -210,7 +210,7 @@ export default function PizzaBuilderModal({ size, flavors, borders, onClose }) {
                           : "border-gray-200 text-gray-600 hover:border-brand-300 hover-lift"
                       }`}
                     >
-                      {border.name} <span className="text-amber-600 font-bold ml-1">+R$ {Number(border.price).toFixed(2)}</span>
+                      {border.name} <span className="font-price text-melt font-medium ml-1">+R$ {Number(border.price).toFixed(2)}</span>
                     </button>
                   ))}
                 </div>
@@ -232,26 +232,26 @@ export default function PizzaBuilderModal({ size, flavors, borders, onClose }) {
               </div>
 
               {/* Resumo de Preço */}
-              <div className="bg-gradient-to-br from-accent-50 to-brand-50 rounded-lg p-4 space-y-2 border border-accent-200">
+              <div className="bg-flour-2 rounded-lg p-4 space-y-2 border border-ember-200">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Tamanho:</span>
-                  <span className="font-semibold">R$ {Number(size.price).toFixed(2)}</span>
+                  <span className="font-price font-medium">R$ {Number(size.price).toFixed(2)}</span>
                 </div>
                 {flavorsExtra > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Extras:</span>
-                    <span className="font-semibold text-accent-600">+R$ {flavorsExtra.toFixed(2)}</span>
+                    <span className="font-price font-medium text-ember-600">+R$ {flavorsExtra.toFixed(2)}</span>
                   </div>
                 )}
                 {borderPrice > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Borda:</span>
-                    <span className="font-semibold text-amber-600">+R$ {borderPrice.toFixed(2)}</span>
+                    <span className="font-price font-medium text-melt">+R$ {borderPrice.toFixed(2)}</span>
                   </div>
                 )}
-                <div className="border-t border-accent-200 pt-2 flex justify-between font-bold">
+                <div className="border-t border-ember-200 pt-2 flex justify-between font-bold">
                   <span>Por unidade:</span>
-                  <span className="text-accent-600 text-lg">R$ {unitPrice.toFixed(2)}</span>
+                  <span className="font-price text-ember-600 text-lg">R$ {unitPrice.toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -259,10 +259,10 @@ export default function PizzaBuilderModal({ size, flavors, borders, onClose }) {
         </div>
 
         {/* Footer fixo */}
-        <div className="sticky bottom-0 bg-white border-t border-black/5 p-4 sm:p-5 flex items-center justify-between gap-3 sm:gap-4 shadow-lg flex-shrink-0">
-          <div className="flex items-center border border-gray-200 rounded-full transition-smooth hover:border-brand-300 bg-gray-50 min-h-[44px]">
+        <div className="sticky bottom-0 bg-white border-t border-black/5 p-4 sm:p-5 flex items-center justify-between gap-3 sm:gap-4 flex-shrink-0">
+          <div className="flex items-center border border-gray-200 rounded-full transition-smooth hover:border-ember-300 bg-gray-50 min-h-[44px]">
             <button
-              className="w-10 h-10 sm:w-9 sm:h-9 flex items-center justify-center hover:text-accent-600 transition-colors font-bold"
+              className="w-10 h-10 sm:w-9 sm:h-9 flex items-center justify-center hover:text-ember-600 transition-colors font-bold"
               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
               aria-label="Diminuir quantidade"
             >
@@ -270,7 +270,7 @@ export default function PizzaBuilderModal({ size, flavors, borders, onClose }) {
             </button>
             <span className="w-8 text-center font-semibold text-sm">{quantity}</span>
             <button
-              className="w-10 h-10 sm:w-9 sm:h-9 flex items-center justify-center hover:text-accent-600 transition-colors font-bold"
+              className="w-10 h-10 sm:w-9 sm:h-9 flex items-center justify-center hover:text-ember-600 transition-colors font-bold"
               onClick={() => setQuantity((q) => q + 1)}
               aria-label="Aumentar quantidade"
             >
@@ -282,11 +282,11 @@ export default function PizzaBuilderModal({ size, flavors, borders, onClose }) {
             onClick={handleAddToCart}
             disabled={selectedFlavors.length === 0}
             className={`btn-primary flex-1 transition-all duration-300 text-xs sm:text-sm py-3 min-h-[48px] sm:min-h-[44px] flex flex-col items-center justify-center ${
-              selectedFlavors.length === 0 ? "opacity-50 pointer-events-none" : "hover:shadow-lg"
+              selectedFlavors.length === 0 ? "opacity-50 pointer-events-none" : ""
             }`}
           >
             <span className="font-bold">Adicionar ao carrinho</span>
-            <span className="text-xs opacity-90">R$ {(unitPrice * quantity).toFixed(2)}</span>
+            <span className="font-price text-xs opacity-90">R$ {(unitPrice * quantity).toFixed(2)}</span>
           </button>
         </div>
       </div>

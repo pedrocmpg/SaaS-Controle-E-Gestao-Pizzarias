@@ -65,10 +65,10 @@ export default function Menu() {
             className="card p-6 flex flex-col hover-lift hover-glow animate-fade-in"
             style={{ animationDelay: `${index * 100}ms` }}
           >
-            <h3 className="font-bold text-lg text-brand-900">{size.name}</h3>
+            <h3 className="font-bold text-lg text-char">{size.name}</h3>
             <p className="text-sm text-gray-500 mt-1 flex-1">{size.description}</p>
             <p className="text-xs text-gray-400 mt-2">Serve {size.servesPeople} pessoas</p>
-            <p className="text-2xl font-extrabold text-accent-600 mt-3">
+            <p className="font-price text-2xl font-medium text-ember-600 mt-3">
               R$ {Number(size.price).toFixed(2)}
             </p>
             <button
@@ -130,14 +130,14 @@ function ProductCard({ product, onAdd, index = 0, compact = false }) {
       }`}
       style={{ animationDelay: `${index * 100}ms` }}
     >
-      <h3 className="font-bold text-brand-900">{product.name}</h3>
+      <h3 className="font-bold text-char">{product.name}</h3>
       {product.description && (
         <p className="text-sm text-gray-500 mt-1 flex-1">{product.description}</p>
       )}
       {product.servesPeople && (
         <p className="text-xs text-gray-400 mt-2">Serve {product.servesPeople} pessoas</p>
       )}
-      <p className="text-xl font-extrabold text-accent-600 mt-3">
+      <p className="font-price text-xl font-medium text-ember-600 mt-3">
         R$ {Number(product.price).toFixed(2)}
       </p>
       <button onClick={handleAdd} className="btn-secondary mt-4 transition-all duration-300">

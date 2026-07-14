@@ -1,5 +1,9 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useStore } from "../context/StoreContext";
+import { catalogService } from "../services/api";
+import PizzaBuilderModal from "../components/PizzaBuilderModal";
+import { HeroPizzaPreview } from "../components/PizzaPreview";
 
 const differentiators = [
   {
@@ -26,6 +30,18 @@ const differentiators = [
 
 export default function Home() {
   const { settings } = useStore();
+  const [catalog, setCatalog] = useState(null);
+  const [buildingSize, setBuildingSize] = useState(null);
+
+  useEffect(() => {
+    catalogService.getAll().then(setCatalog).catch(() => {});
+  }, []);
+
+  function handleOpenBuilder() {
+    if (catalog?.pizzaSizes?.length) {
+      setBuildingSize(catalog.pizzaSizes[0]);
+    }
+  }
 
   return (
     <div>
@@ -45,15 +61,15 @@ export default function Home() {
           {/* Coluna esquerda - Texto */}
           <div className="z-10 flex flex-col justify-center max-w-2xl">
             {/* Rating Badge */}
-            <span className="inline-flex items-center gap-2 bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-full w-fit mb-6">
+            <span className="inline-flex items-center gap-2 bg-char text-flour text-xs font-bold px-4 py-2 rounded-full w-fit mb-6">
               <span className="text-sm">★ 4.8 NO DELIVERY</span>
             </span>
 
             {/* Headline - Com fonte serif */}
-            <h1 className="font-serif text-5xl md:text-6xl lg:text-7xl font-black text-gray-900 leading-tight mb-2">
+            <h1 className="font-serif text-5xl md:text-6xl lg:text-7xl font-semibold text-char leading-tight mb-2">
               Sua Marca
             </h1>
-            <h2 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-red-600 mb-4">
+            <h2 className="text-4xl md:text-5xl lg:text-6xl font-semibold font-serif text-ember-500 mb-4">
               Aqui
             </h2>
 
@@ -70,7 +86,7 @@ export default function Home() {
               </div>
               <div className="flex items-center gap-2 text-gray-700">
                 <span className="text-lg">💰</span>
-                <span>R$ {Number(settings.minDeliveryFee).toFixed(2)} a R$ {Number(settings.maxDeliveryFee).toFixed(2)}</span>
+                <span className="font-price">R$ {Number(settings.minDeliveryFee).toFixed(2)} a R$ {Number(settings.maxDeliveryFee).toFixed(2)}</span>
               </div>
               <div className="flex items-center gap-2 text-gray-700">
                 <span className="text-lg">📍</span>
@@ -80,17 +96,34 @@ export default function Home() {
 
             {/* Botões CTA */}
             <div className="flex flex-wrap gap-4">
-              <Link to="/cardapio" className="btn-primary bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg transition-colors">
+              <Link to="/cardapio" className="btn-primary">
                 Monte sua pizza
               </Link>
               <a
                 href={settings.ifoodUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="btn-outline border-2 border-gray-400 text-gray-700 font-bold py-3 px-6 rounded-lg hover:bg-gray-100 transition-colors"
+                className="btn-outline"
               >
                 Pedir no iFood
               </a>
+            </div>
+
+            {/* Preview do Montador de Pizza */}
+            <div className="mt-10 flex items-center gap-5 bg-flour/90 backdrop-blur-sm rounded-2xl p-4 sm:p-5 w-fit border border-char/5">
+              <HeroPizzaPreview />
+              <div>
+                <p className="font-serif text-lg sm:text-xl font-semibold text-char leading-snug">
+                  Monte a sua com até 4 sabores
+                </p>
+                <button
+                  onClick={handleOpenBuilder}
+                  disabled={!catalog}
+                  className="btn-primary mt-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Montar minha pizza
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -127,7 +160,7 @@ export default function Home() {
             Ver no Google Maps
           </a>
         </div>
-        <div className="rounded-2xl overflow-hidden shadow-card h-72">
+        <div className="rounded-2xl overflow-hidden border border-[#EAE1D3] h-72">
           <iframe
             title="Mapa"
             className="w-full h-full border-0"
@@ -136,6 +169,15 @@ export default function Home() {
           />
         </div>
       </section>
+
+      {buildingSize && (
+        <PizzaBuilderModal
+          size={buildingSize}
+          flavors={catalog.flavors}
+          borders={catalog.borders}
+          onClose={() => setBuildingSize(null)}
+        />
+      )}
     </div>
   );
 }

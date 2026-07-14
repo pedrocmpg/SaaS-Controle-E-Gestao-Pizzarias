@@ -185,7 +185,7 @@
 }
 
 .hover-glow {
-  @apply transition-smooth hover:shadow-lg hover:shadow-accent-500/20;
+  @apply transition-smooth hover:border-ember-300;
 }
 
 .active-press {

@@ -97,7 +97,7 @@ export default function CartDrawer({ open, onClose }) {
                 </div>
               </div>
 
-              <p className="font-semibold text-accent-600 whitespace-nowrap text-sm sm:text-base flex-shrink-0">
+              <p className="font-price font-medium text-ember-600 whitespace-nowrap text-sm sm:text-base flex-shrink-0">
                 R$ {(item.unitPrice * item.quantity).toFixed(2)}
               </p>
             </div>
@@ -105,9 +105,9 @@ export default function CartDrawer({ open, onClose }) {
         </div>
 
         <div className="p-4 sm:p-5 border-t border-black/5 bg-page/50 space-y-3 sm:space-y-4">
-          <div className="flex justify-between text-base sm:text-lg font-bold text-brand-900">
+          <div className="flex justify-between text-base sm:text-lg font-bold text-char">
             <span>Subtotal</span>
-            <span className="transition-all duration-300">
+            <span className="font-price transition-all duration-300">
               R$ {subtotal.toFixed(2)}
             </span>
           </div>

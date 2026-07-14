@@ -26,7 +26,7 @@ export default function Header({ onOpenCart }) {
 
   return (
     <header
-      className="sticky top-0 z-40 bg-page/95 backdrop-blur border-b border-black/5 shadow-sm"
+      className="sticky top-0 z-40 bg-page/95 backdrop-blur border-b border-black/5"
       role="banner"
     >
       <div className="container-app flex items-center justify-between h-20">
@@ -45,8 +45,8 @@ export default function Header({ onOpenCart }) {
               key={link.to}
               to={link.to}
               className={({ isActive }) =>
-                `font-medium transition-colors duration-200 relative group focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent-500 rounded px-2 py-1 ${
-                  isActive ? "text-accent-600" : "text-ink hover:text-brand-700"
+                `font-medium transition-colors duration-200 relative group focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ember-500 rounded px-2 py-1 underline-offset-4 ${
+                  isActive ? "text-ember-600 underline" : "text-ink hover:text-ember-600"
                 }`
               }
               aria-current={({ isActive }) => (isActive ? "page" : undefined)}
@@ -104,8 +104,8 @@ export default function Header({ onOpenCart }) {
               to={link.to}
               onClick={() => setMenuOpen(false)}
               className={({ isActive }) =>
-                `py-3 font-medium border-b border-black/5 last:border-none transition-all duration-300 transform focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-500 px-2 ${
-                  isActive ? "text-accent-600" : "text-ink"
+                `py-3 font-medium border-b border-black/5 last:border-none transition-all duration-300 transform focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ember-500 px-2 ${
+                  isActive ? "text-ember-600 underline underline-offset-4" : "text-ink"
                 } ${menuOpen ? "translate-x-0" : "-translate-x-2"}`
               }
               style={{

@@ -4,40 +4,65 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Paleta baseada na logo da E Tenho Ditto (verde sálvia + preto)
+        // Identidade "forno a lenha": carvão + fogo-ember, dourado como detalhe
+        char: "#201A16",
+        ember: {
+          50: "#fdf0ec",
+          100: "#fad9cd",
+          200: "#f0af98",
+          300: "#e58362",
+          400: "#da5b38",
+          500: "#D2401F", // única cor de CTA/ação do site
+          600: "#A8321A", // hover dos botões ember
+          700: "#802616",
+          800: "#571a10",
+          900: "#2e0d08",
+        },
+        melt: "#E8A33D",
+        flour: {
+          DEFAULT: "#FAF6F0",
+          2: "#F1E9DD",
+        },
+        basil: "#4C6B3C",
+        ink: {
+          DEFAULT: "#2B2521",
+          soft: "#6E655C",
+        },
+        // Mantidos por compatibilidade com classes existentes (brand/accent),
+        // repontados para a nova paleta
         brand: {
-          50: "#f2f8f2",
-          100: "#dfeee0",
-          200: "#b9dabb",
-          300: "#94c797",
-          400: "#7fb883",
-          500: "#6aa66e", // verde principal (tom da logo)
-          600: "#548557",
-          700: "#3f6442",
-          800: "#2a432c",
-          900: "#162216",
+          50: "#F1E9DD",
+          100: "#F1E9DD",
+          200: "#E8A33D",
+          300: "#E8A33D",
+          400: "#4C6B3C",
+          500: "#4C6B3C",
+          600: "#4C6B3C",
+          700: "#201A16",
+          800: "#201A16",
+          900: "#201A16",
         },
         accent: {
-          50: "#fdf3ee",
-          100: "#fbe3d6",
-          200: "#f5c1a3",
-          300: "#ef9e70",
-          400: "#e97c3d",
-          500: "#d95f20", // laranja queimado - CTA / preços / destaque
-          600: "#b04a19",
-          700: "#873713",
-          800: "#5e250d",
-          900: "#361507",
+          50: "#fdf0ec",
+          100: "#fad9cd",
+          200: "#f0af98",
+          300: "#e58362",
+          400: "#da5b38",
+          500: "#D2401F",
+          600: "#A8321A",
+          700: "#802616",
+          800: "#571a10",
+          900: "#2e0d08",
         },
-        ink: "#1b1b1b",
       },
       fontFamily: {
-        display: ["'Poppins'", "sans-serif"],
+        display: ["'Fraunces'", "serif"],
         body: ["'Inter'", "sans-serif"],
-        serif: ["'Playfair Display'", "serif"],
+        serif: ["'Fraunces'", "serif"],
+        mono: ["'IBM Plex Mono'", "monospace"],
       },
       boxShadow: {
-        card: "0 4px 20px -4px rgba(0,0,0,0.12)",
+        card: "none",
       },
       animation: {
         "fade-in": "fadeIn 0.3s ease-in-out",
@@ -74,8 +99,8 @@ export default {
           "50%": { transform: "translateY(-4px)" },
         },
         glow: {
-          "0%, 100%": { "box-shadow": "0 0 5px rgba(217, 95, 32, 0.5)" },
-          "50%": { "box-shadow": "0 0 20px rgba(217, 95, 32, 0.8)" },
+          "0%, 100%": { "box-shadow": "0 0 5px rgba(210, 64, 31, 0.5)" },
+          "50%": { "box-shadow": "0 0 20px rgba(210, 64, 31, 0.8)" },
         },
       },
     },

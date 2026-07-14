@@ -72,7 +72,7 @@ export function Modal({
         >
           {/* Header */}
           <div className="sticky top-0 bg-white flex items-center justify-between p-5 border-b border-black/5 z-10">
-            <h2 id="modal-title" className="text-xl font-bold text-brand-900">
+            <h2 id="modal-title" className="text-xl font-display font-semibold text-char">
               {title}
             </h2>
             {closeButton && (
