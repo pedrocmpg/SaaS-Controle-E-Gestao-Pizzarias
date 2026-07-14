@@ -174,7 +174,7 @@ const flavorSchema = Joi.object({
     .max(100)
     .required(),
   type: Joi.string()
-    .valid("PIZZA", "DOCE")
+    .valid("SALGADA", "DOCE")
     .required(),
   active: Joi.boolean(),
   order: Joi.number()
