@@ -220,6 +220,40 @@ const productSchema = Joi.object({
     .min(0),
 });
 
+/**
+ * Schema para edição parcial de tamanho de pizza (preço/disponibilidade)
+ */
+// Nota: o schema pizzaSizeSchema (criação) usa "basePrice", mas o campo real no
+// Prisma é "price" — usamos o nome correto aqui para a edição parcial.
+const pizzaSizePatchSchema = Joi.object({
+  price: Joi.number().positive(),
+  active: Joi.boolean(),
+}).min(1);
+
+/**
+ * Schema para edição parcial de sabor (preço extra/disponibilidade)
+ */
+const flavorPatchSchema = Joi.object({
+  extraPrice: Joi.number().min(0),
+  active: Joi.boolean(),
+}).min(1);
+
+/**
+ * Schema para edição parcial de borda (preço/disponibilidade)
+ */
+const borderPatchSchema = Joi.object({
+  price: Joi.number().positive(),
+  active: Joi.boolean(),
+}).min(1);
+
+/**
+ * Schema para edição parcial de produto (preço/disponibilidade)
+ */
+const productPatchSchema = Joi.object({
+  price: Joi.number().positive(),
+  active: Joi.boolean(),
+}).min(1);
+
 module.exports = {
   loginSchema,
   createOrderSchema,
@@ -229,4 +263,8 @@ module.exports = {
   flavorSchema,
   borderSchema,
   productSchema,
+  pizzaSizePatchSchema,
+  flavorPatchSchema,
+  borderPatchSchema,
+  productPatchSchema,
 };

@@ -16,8 +16,13 @@ export default function AdminLogin() {
     setLoading(true);
     setError(null);
     try {
-      await login(email, password);
-      navigate("/admin/dashboard");
+      const data = await login(email, password);
+      const role = data.admin?.role;
+      if (role === "GERENTE" || role === "ATENDENTE") {
+        navigate("/operacao/pedidos");
+      } else {
+        navigate("/admin/dashboard");
+      }
     } catch (err) {
       setError(
         err.response?.data?.error || "Não foi possível entrar. Verifique suas credenciais."

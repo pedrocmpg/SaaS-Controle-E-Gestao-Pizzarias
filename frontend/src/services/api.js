@@ -41,6 +41,10 @@ export const catalogService = {
   getFlavors: (type) => api.get("/catalog/flavors", { params: { type } }).then((r) => r.data),
   getBorders: () => api.get("/catalog/borders").then((r) => r.data),
   getProducts: (category) => api.get("/catalog/products", { params: { category } }).then((r) => r.data),
+  patchSize: (id, data) => api.patch(`/catalog/sizes/${id}`, data).then((r) => r.data),
+  patchFlavor: (id, data) => api.patch(`/catalog/flavors/${id}`, data).then((r) => r.data),
+  patchBorder: (id, data) => api.patch(`/catalog/borders/${id}`, data).then((r) => r.data),
+  patchProduct: (id, data) => api.patch(`/catalog/products/${id}`, data).then((r) => r.data),
 };
 
 export const settingsService = {
@@ -53,6 +57,7 @@ export const ordersService = {
   list: (params) => api.get("/orders", { params }).then((r) => r.data),
   getById: (id) => api.get(`/orders/${id}`).then((r) => r.data),
   updateStatus: (id, status) => api.patch(`/orders/${id}/status`, { status }).then((r) => r.data),
+  getTodayReport: () => api.get("/orders/reports/today").then((r) => r.data),
 };
 
 export const authService = {

@@ -9,6 +9,7 @@ const { createOrderSchema, updateOrderStatusSchema } = require("../validators/sc
 const { logSecurityEvent } = require("../lib/securityLogger");
 const { ALL_STATUSES, isValidTransition } = require("../lib/orderStatus");
 const { emitPedidoNovo, emitPedidoStatus } = require("../lib/socket");
+const { logAuditChange } = require("../middleware/auditLogger");
 
 const router = express.Router();
 
@@ -141,6 +142,38 @@ router.get("/", requireAuth, requireAnyRole(...ORDER_ROLES), adminReadLimiter, a
 });
 
 /**
+ * GET /api/orders/reports/today
+ * Números simples do dia atual: total de pedidos, faturamento, ticket médio.
+ * Protegida (SUPER_ADMIN, ADMIN, GERENTE — não ATENDENTE).
+ */
+router.get("/reports/today", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminReadLimiter, async (req, res, next) => {
+  try {
+    const ip = req.ip || req.connection.remoteAddress;
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const orders = await prisma.order.findMany({
+      where: {
+        createdAt: { gte: startOfDay },
+        status: { not: "CANCELADO" },
+      },
+      select: { totalPrice: true },
+    });
+
+    const ordersToday = orders.length;
+    const revenueToday = orders.reduce((sum, o) => sum + Number(o.totalPrice), 0);
+    const averageTicket = ordersToday > 0 ? revenueToday / ordersToday : 0;
+
+    logSecurityEvent("VIEW_TODAY_REPORT", { adminId: req.admin.id }, ip);
+
+    res.json({ ordersToday, revenueToday, averageTicket });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * GET /api/orders/:id
  * Consulta um pedido específico. Protegida.
  * Descriptografa telefone e endereço.
@@ -223,6 +256,17 @@ router.patch("/:id/status", requireAuth, requireAnyRole(...ORDER_ROLES), adminWr
       orderId,
       newStatus: status,
     }, ip);
+
+    logAuditChange(
+      "Order",
+      orderId,
+      "UPDATE",
+      { status: current.status },
+      { status: order.status },
+      req.admin.id,
+      ip,
+      req.get("user-agent")
+    ).catch((err) => console.error("Erro ao logar auditoria de status de pedido:", err));
 
     // Notifica o painel em tempo real (room da loja)
     emitPedidoStatus(order.lojaId, order);
