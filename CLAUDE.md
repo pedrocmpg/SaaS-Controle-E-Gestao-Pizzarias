@@ -14,8 +14,8 @@ Sistema web full-stack para pizzarias (mercado-alvo: redes regionais de 3-4 unid
 - Falta: tela pro Admin Master cadastrar novos funcionários (gerentes/atendentes) sem deslogar o Admin atual
 
 ## Convenções
-- [preencher: gerenciador de pacotes — npm
-- [preencher: comando de rodar dev — npm run dev
+- gerenciador de pacotes — npm
+- comando de rodar dev — npm run dev
 
 
 ## O que NÃO fazer
