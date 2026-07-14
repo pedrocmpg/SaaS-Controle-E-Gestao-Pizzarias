@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { useStore } from "../context/StoreContext";
 import { catalogService } from "../services/api";
 import PizzaBuilderModal from "../components/PizzaBuilderModal";
-import { HeroPizzaPreview } from "../components/PizzaPreview";
 
 const differentiators = [
   {
@@ -36,12 +35,6 @@ export default function Home() {
   useEffect(() => {
     catalogService.getAll().then(setCatalog).catch(() => {});
   }, []);
-
-  function handleOpenBuilder() {
-    if (catalog?.pizzaSizes?.length) {
-      setBuildingSize(catalog.pizzaSizes[0]);
-    }
-  }
 
   return (
     <div>
@@ -107,23 +100,6 @@ export default function Home() {
               >
                 Pedir no iFood
               </a>
-            </div>
-
-            {/* Preview do Montador de Pizza */}
-            <div className="mt-10 flex items-center gap-5 bg-flour/90 backdrop-blur-sm rounded-2xl p-4 sm:p-5 w-fit border border-char/5">
-              <HeroPizzaPreview />
-              <div>
-                <p className="font-serif text-lg sm:text-xl font-semibold text-char leading-snug">
-                  Monte a sua com até 4 sabores
-                </p>
-                <button
-                  onClick={handleOpenBuilder}
-                  disabled={!catalog}
-                  className="btn-primary mt-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Montar minha pizza
-                </button>
-              </div>
             </div>
           </div>
         </div>
