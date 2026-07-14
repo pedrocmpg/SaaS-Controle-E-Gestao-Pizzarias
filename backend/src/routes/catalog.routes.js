@@ -44,7 +44,7 @@ router.get("/sizes", adminReadLimiter, async (req, res, next) => {
   }
 });
 
-router.post("/sizes", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), adminWriteLimiter, auditCatalogChange("PizzaSize"), validateRequest(pizzaSizeSchema), async (req, res, next) => {
+router.post("/sizes", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("PizzaSize"), validateRequest(pizzaSizeSchema), async (req, res, next) => {
   try {
     const ip = req.ip || req.connection.remoteAddress;
 
@@ -58,7 +58,7 @@ router.post("/sizes", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), admin
   }
 });
 
-router.put("/sizes/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), adminWriteLimiter, auditCatalogChange("PizzaSize"), validateRequest(pizzaSizeSchema), async (req, res, next) => {
+router.put("/sizes/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("PizzaSize"), validateRequest(pizzaSizeSchema), async (req, res, next) => {
   try {
     const sizeId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;
@@ -80,7 +80,7 @@ router.put("/sizes/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), ad
   }
 });
 
-router.delete("/sizes/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), adminWriteLimiter, auditCatalogChange("PizzaSize"), async (req, res, next) => {
+router.delete("/sizes/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("PizzaSize"), async (req, res, next) => {
   try {
     const sizeId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;
@@ -113,7 +113,7 @@ router.get("/flavors", adminReadLimiter, async (req, res, next) => {
   }
 });
 
-router.post("/flavors", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), adminWriteLimiter, auditCatalogChange("Flavor"), validateRequest(flavorSchema), async (req, res, next) => {
+router.post("/flavors", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("Flavor"), validateRequest(flavorSchema), async (req, res, next) => {
   try {
     const ip = req.ip || req.connection.remoteAddress;
 
@@ -127,7 +127,7 @@ router.post("/flavors", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), adm
   }
 });
 
-router.put("/flavors/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), adminWriteLimiter, auditCatalogChange("Flavor"), validateRequest(flavorSchema), async (req, res, next) => {
+router.put("/flavors/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("Flavor"), validateRequest(flavorSchema), async (req, res, next) => {
   try {
     const flavorId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;
@@ -149,7 +149,7 @@ router.put("/flavors/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), 
   }
 });
 
-router.delete("/flavors/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), adminWriteLimiter, auditCatalogChange("Flavor"), async (req, res, next) => {
+router.delete("/flavors/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("Flavor"), async (req, res, next) => {
   try {
     const flavorId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;
@@ -178,7 +178,7 @@ router.get("/borders", adminReadLimiter, async (req, res, next) => {
   }
 });
 
-router.post("/borders", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), adminWriteLimiter, auditCatalogChange("Border"), validateRequest(borderSchema), async (req, res, next) => {
+router.post("/borders", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("Border"), validateRequest(borderSchema), async (req, res, next) => {
   try {
     const ip = req.ip || req.connection.remoteAddress;
 
@@ -192,7 +192,7 @@ router.post("/borders", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), adm
   }
 });
 
-router.put("/borders/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), adminWriteLimiter, auditCatalogChange("Border"), validateRequest(borderSchema), async (req, res, next) => {
+router.put("/borders/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("Border"), validateRequest(borderSchema), async (req, res, next) => {
   try {
     const borderId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;
@@ -214,7 +214,7 @@ router.put("/borders/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), 
   }
 });
 
-router.delete("/borders/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), adminWriteLimiter, auditCatalogChange("Border"), async (req, res, next) => {
+router.delete("/borders/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("Border"), async (req, res, next) => {
   try {
     const borderId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;
@@ -247,7 +247,7 @@ router.get("/products", adminReadLimiter, async (req, res, next) => {
   }
 });
 
-router.post("/products", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), adminWriteLimiter, auditCatalogChange("Product"), validateRequest(productSchema), async (req, res, next) => {
+router.post("/products", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("Product"), validateRequest(productSchema), async (req, res, next) => {
   try {
     const ip = req.ip || req.connection.remoteAddress;
 
@@ -261,7 +261,7 @@ router.post("/products", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), ad
   }
 });
 
-router.put("/products/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), adminWriteLimiter, auditCatalogChange("Product"), validateRequest(productSchema), async (req, res, next) => {
+router.put("/products/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("Product"), validateRequest(productSchema), async (req, res, next) => {
   try {
     const productId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;
@@ -283,7 +283,7 @@ router.put("/products/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"),
   }
 });
 
-router.delete("/products/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), adminWriteLimiter, auditCatalogChange("Product"), async (req, res, next) => {
+router.delete("/products/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("Product"), async (req, res, next) => {
   try {
     const productId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;

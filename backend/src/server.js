@@ -1,4 +1,5 @@
 require("dotenv").config();
+const http = require("http");
 const express = require("express");
 const cookieParser = require("cookie-parser");
 
@@ -13,6 +14,7 @@ const { generalLimiter } = require("./middleware/rateLimiter");
 const { enableCookiesWithCORS, getCookieConfig } = require("./middleware/cookieConfig");
 const { csrfProtection } = require("./middleware/csrf");
 const { httpLogger } = require("./middleware/httpLogger");
+const { initSocket } = require("./lib/socket");
 
 const authRoutes = require("./routes/auth.routes");
 const adminRoutes = require("./routes/admin.routes");
@@ -90,7 +92,12 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 3333;
-app.listen(PORT, () => {
+
+// Servidor HTTP explícito para anexar o Socket.io ao mesmo servidor do Express
+const server = http.createServer(app);
+initSocket(server);
+
+server.listen(PORT, () => {
   console.log(`Servidor rodando em http://localhost:${PORT}`);
   console.log(`Ambiente: ${process.env.NODE_ENV || "development"}`);
 });

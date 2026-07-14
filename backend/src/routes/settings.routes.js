@@ -17,7 +17,7 @@ const router = express.Router();
  */
 router.get("/", async (req, res, next) => {
   try {
-    const settings = await prisma.storeSettings.findUnique({ where: { id: 1 } });
+    const settings = await prisma.loja.findUnique({ where: { id: 1 } });
 
     if (!settings) {
       return res.status(404).json({ error: "Configurações da loja não encontradas. Execute o seed." });
@@ -58,7 +58,7 @@ router.put("/", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), adminWriteL
       dataToUpdate.address = encrypt(dataToUpdate.address);
     }
 
-    const settings = await prisma.storeSettings.update({
+    const settings = await prisma.loja.update({
       where: { id: 1 },
       data: dataToUpdate,
     });

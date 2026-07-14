@@ -106,7 +106,7 @@ const createOrderSchema = Joi.object({
  */
 const updateOrderStatusSchema = Joi.object({
   status: Joi.string()
-    .valid("PENDENTE", "CONFIRMADO", "EM_PREPARO", "SAIU_PARA_ENTREGA", "ENTREGUE", "CANCELADO")
+    .valid("RECEBIDO", "EM_PREPARO", "SAIU_PARA_ENTREGA", "ENTREGUE", "CANCELADO")
     .required()
     .messages({
       "any.only": "Status inválido",

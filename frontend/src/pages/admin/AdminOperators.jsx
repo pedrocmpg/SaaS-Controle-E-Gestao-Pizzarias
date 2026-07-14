@@ -1,8 +1,6 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { adminUsersService } from "../../services/api";
-import { useAdminAuth } from "../../context/AdminAuthContext";
-import Logo from "../../components/Logo";
+import AdminHeader from "../../components/AdminHeader";
 
 const roleLabels = {
   GERENTE: "Gerente",
@@ -10,9 +8,6 @@ const roleLabels = {
 };
 
 export default function AdminOperators() {
-  const { admin, logout } = useAdminAuth();
-  const navigate = useNavigate();
-
   const [form, setForm] = useState({ name: "", email: "", password: "", role: "ATENDENTE" });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -42,23 +37,7 @@ export default function AdminOperators() {
 
   return (
     <div className="min-h-screen bg-brand-50">
-      <header className="bg-white border-b border-black/5">
-        <div className="container-app flex items-center justify-between h-20">
-          <Logo />
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate("/admin/dashboard")}
-              className="text-sm font-semibold text-brand-900 hover:underline"
-            >
-              Pedidos
-            </button>
-            <span className="text-sm text-gray-500">Olá, {admin?.name || "Admin"}</span>
-            <button onClick={logout} className="text-sm font-semibold text-red-500 hover:underline">
-              Sair
-            </button>
-          </div>
-        </div>
-      </header>
+      <AdminHeader />
 
       <main className="container-app py-10">
         <h1 className="text-2xl font-bold text-brand-900 mb-6">Novo operador</h1>

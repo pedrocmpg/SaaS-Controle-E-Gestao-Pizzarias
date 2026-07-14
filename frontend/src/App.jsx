@@ -6,7 +6,7 @@ import About from "./pages/About";
 import Contact from "./pages/Contact";
 import Checkout from "./pages/Checkout";
 import AdminLogin from "./pages/admin/AdminLogin";
-import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminKanban from "./pages/admin/AdminKanban";
 import AdminOperators from "./pages/admin/AdminOperators";
 import AdminRoute from "./pages/admin/AdminRoute";
 import { AdminAuthProvider } from "./context/AdminAuthContext";
@@ -45,8 +45,8 @@ function AdminRoutes() {
       <Route
         path="/dashboard"
         element={
-          <AdminRoute>
-            <AdminDashboard />
+          <AdminRoute allowedRoles={["SUPER_ADMIN", "ADMIN", "GERENTE", "ATENDENTE"]}>
+            <AdminKanban />
           </AdminRoute>
         }
       />

@@ -35,11 +35,12 @@ async function main() {
     dom: { open: "18:00", close: "23:00" },
   };
 
-  await prisma.storeSettings.upsert({
+  await prisma.loja.upsert({
     where: { id: 1 },
     update: {},
     create: {
       id: 1,
+      nome: process.env.LOJA_NOME || "E Tenho Ditto Pizzaria",
       whatsapp: "5554999999999", // número fictício - atualizar depois
       phone: "(54) 99999-9999", // número fictício - atualizar depois
       address: "R Pernambuco, 392 - Sala 01",

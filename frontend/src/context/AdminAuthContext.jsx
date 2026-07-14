@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { authService, fetchCsrfToken } from "../services/api";
+import { disconnectSocket } from "../services/socket";
 
 const AdminAuthContext = createContext(null);
 const TOKEN_KEY = "etd_admin_token";
@@ -34,6 +35,7 @@ export function AdminAuthProvider({ children }) {
   }
 
   function logout() {
+    disconnectSocket();
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
     setAdmin(null);

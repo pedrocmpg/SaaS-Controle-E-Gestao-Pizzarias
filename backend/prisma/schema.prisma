@@ -28,8 +28,7 @@ enum DeliveryType {
 }
 
 enum OrderStatus {
-  PENDENTE
-  CONFIRMADO
+  RECEBIDO
   EM_PREPARO
   SAIU_PARA_ENTREGA
   ENTREGUE
@@ -103,19 +102,22 @@ model Product {
 /// Pedido feito por um cliente
 model Order {
   id            Int           @id @default(autoincrement())
+  lojaId        Int
+  loja          Loja          @relation(fields: [lojaId], references: [id])
   customerName  String
   phone         String        // Criptografado no banco (de/encrypt no app)
   address       String?       // Criptografado no banco
   deliveryType  DeliveryType  @default(ENTREGA)
   paymentMethod String
   notes         String?
-  status        OrderStatus   @default(PENDENTE)
+  status        OrderStatus   @default(RECEBIDO)
   deliveryFee   Decimal       @db.Decimal(10, 2) @default(0)
   totalPrice    Decimal       @db.Decimal(10, 2)
   items         OrderItem[]
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
+  @@index([lojaId, status])
   @@map("orders")
 }
 
@@ -186,9 +188,11 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-/// Configurações gerais da loja (dados que o cliente pode editar)
-model StoreSettings {
-  id              Int      @id @default(1)
+/// Loja (unidade da rede). Dona da configuração e alvo dos pedidos.
+/// Por ora existe 1 registro em produção; a estrutura já suporta múltiplas lojas.
+model Loja {
+  id              Int      @id @default(autoincrement())
+  nome            String
   whatsapp        String   // Criptografado no banco
   phone           String   // Criptografado no banco
   address         String   // Criptografado no banco
@@ -204,7 +208,9 @@ model StoreSettings {
   minDeliveryTime Int      @default(40)
   maxDeliveryTime Int      @default(70)
   isOpen          Boolean  @default(true)
+  pedidos         Order[]
+  createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  @@map("store_settings")
+  @@map("lojas")
 }

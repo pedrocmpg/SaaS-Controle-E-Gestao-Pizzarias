@@ -14,7 +14,7 @@ const router = express.Router();
  * GET /api/admin/users
  * Lista todos os admins (SUPER_ADMIN e ADMIN podem listar)
  */
-router.get("/users", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), adminReadLimiter, async (req, res, next) => {
+router.get("/users", requireAuth, requireRole("SUPER_ADMIN"), adminReadLimiter, async (req, res, next) => {
   try {
     const ip = req.ip || req.connection.remoteAddress;
 
@@ -44,7 +44,7 @@ router.get("/users", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), adminR
  * GET /api/admin/users/:id
  * Retorna dados de um admin específico
  */
-router.get("/users/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), adminReadLimiter, async (req, res, next) => {
+router.get("/users/:id", requireAuth, requireRole("SUPER_ADMIN"), adminReadLimiter, async (req, res, next) => {
   try {
     const adminId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;

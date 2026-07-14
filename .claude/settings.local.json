@@ -5,7 +5,12 @@
       "Bash(nohup npm run dev)",
       "Bash(disown)",
       "Bash(curl -s -c /tmp/claude-1000/-home-pedrocmpg-Projetos-FREELANCE-E-TENHO-DITTO-PIZZARIA/6c3fef2a-8f29-40e9-852a-45689841f663/scratchpad/cookies.txt -X POST http://localhost:3333/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"admin@etenhoditto.com.br\",\"password\":\"Admin@Pizza2024!Segura\"}')",
-      "Bash(node -e \"console.log\\(require\\('joi/package.json'\\).version\\)\")"
+      "Bash(node -e \"console.log\\(require\\('joi/package.json'\\).version\\)\")",
+      "Bash(npx prisma *)",
+      "Bash(npm install *)",
+      "Bash(node -e \"require\\('cookie'\\); console.log\\('cookie OK'\\)\")",
+      "Bash(node -e \"require\\('socket.io'\\); console.log\\('socket.io OK'\\); require\\('./src/lib/socket'\\); console.log\\('lib/socket OK'\\); require\\('./src/lib/orderStatus'\\); console.log\\('orderStatus OK'\\)\")",
+      "Bash(node -e \"require\\('./src/routes/orders.routes'\\); require\\('./src/routes/catalog.routes'\\); require\\('./src/routes/settings.routes'\\); require\\('./src/routes/admin.routes'\\); console.log\\('todas as rotas carregam OK'\\)\")"
     ]
   }
 }

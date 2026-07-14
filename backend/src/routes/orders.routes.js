@@ -7,17 +7,15 @@ const { orderLimiter, adminReadLimiter, adminWriteLimiter } = require("../middle
 const validateRequest = require("../middleware/validateRequest");
 const { createOrderSchema, updateOrderStatusSchema } = require("../validators/schemas");
 const { logSecurityEvent } = require("../lib/securityLogger");
+const { ALL_STATUSES, isValidTransition } = require("../lib/orderStatus");
+const { emitPedidoNovo, emitPedidoStatus } = require("../lib/socket");
 
 const router = express.Router();
 
-const VALID_STATUSES = [
-  "PENDENTE",
-  "CONFIRMADO",
-  "EM_PREPARO",
-  "SAIU_PARA_ENTREGA",
-  "ENTREGUE",
-  "CANCELADO",
-];
+// Roles que podem operar pedidos (ver + mudar status)
+const ORDER_ROLES = ["SUPER_ADMIN", "ADMIN", "GERENTE", "ATENDENTE"];
+
+const VALID_STATUSES = ALL_STATUSES;
 
 /**
  * POST /api/orders
@@ -56,8 +54,15 @@ router.post("/", orderLimiter, validateRequest(createOrderSchema), async (req, r
     const fee = deliveryType === "RETIRADA" ? 0 : Number(deliveryFee) || 10;
     const totalPrice = itemsTotal + fee;
 
+    // Loja de destino: hoje há uma única loja. Estrutura pronta p/ múltiplas lojas.
+    const loja = await prisma.loja.findFirst({ orderBy: { id: "asc" }, select: { id: true } });
+    if (!loja) {
+      return res.status(503).json({ error: "Nenhuma loja configurada. Execute o seed." });
+    }
+
     const order = await prisma.order.create({
       data: {
+        lojaId: loja.id,
         customerName,
         phone: encrypt(phone), // Criptografa telefone
         address: address ? encrypt(address) : null, // Criptografa endereço
@@ -78,6 +83,9 @@ router.post("/", orderLimiter, validateRequest(createOrderSchema), async (req, r
       address: order.address ? decrypt(order.address) : null,
     };
 
+    // Notifica o painel em tempo real (room da loja)
+    emitPedidoNovo(order.lojaId, responseOrder);
+
     res.status(201).json(responseOrder);
   } catch (err) {
     next(err);
@@ -89,18 +97,22 @@ router.post("/", orderLimiter, validateRequest(createOrderSchema), async (req, r
  * Lista pedidos (uso do painel admin). Protegida.
  * Descriptografa telefone e endereço antes de retornar.
  */
-router.get("/", requireAuth, adminReadLimiter, async (req, res, next) => {
+router.get("/", requireAuth, requireAnyRole(...ORDER_ROLES), adminReadLimiter, async (req, res, next) => {
   try {
-    const { status, page = 1, pageSize = 20 } = req.query;
+    const { status, lojaId, page = 1, pageSize = 20 } = req.query;
     const ip = req.ip || req.connection.remoteAddress;
 
     // Validação de página e tamanho
     const pageNum = Math.max(1, parseInt(page) || 1);
     const pageSizeNum = Math.min(100, Math.max(1, parseInt(pageSize) || 20)); // máx 100
 
-    const where = status && VALID_STATUSES.includes(String(status).toUpperCase())
-      ? { status: String(status).toUpperCase() }
-      : undefined;
+    const where = {};
+    if (status && VALID_STATUSES.includes(String(status).toUpperCase())) {
+      where.status = String(status).toUpperCase();
+    }
+    if (lojaId && !isNaN(parseInt(lojaId))) {
+      where.lojaId = parseInt(lojaId);
+    }
 
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
@@ -133,7 +145,7 @@ router.get("/", requireAuth, adminReadLimiter, async (req, res, next) => {
  * Consulta um pedido específico. Protegida.
  * Descriptografa telefone e endereço.
  */
-router.get("/:id", requireAuth, adminReadLimiter, async (req, res, next) => {
+router.get("/:id", requireAuth, requireAnyRole(...ORDER_ROLES), adminReadLimiter, async (req, res, next) => {
   try {
     const orderId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;
@@ -170,7 +182,7 @@ router.get("/:id", requireAuth, adminReadLimiter, async (req, res, next) => {
  * PATCH /api/orders/:id/status
  * Atualiza o status de um pedido. Protegida (SUPER_ADMIN e ADMIN).
  */
-router.patch("/:id/status", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"), adminWriteLimiter, validateRequest(updateOrderStatusSchema), async (req, res, next) => {
+router.patch("/:id/status", requireAuth, requireAnyRole(...ORDER_ROLES), adminWriteLimiter, validateRequest(updateOrderStatusSchema), async (req, res, next) => {
   try {
     const orderId = parseInt(req.params.id);
     const { status } = req.body;
@@ -178,6 +190,26 @@ router.patch("/:id/status", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"),
 
     if (isNaN(orderId)) {
       return res.status(400).json({ error: "ID de pedido inválido" });
+    }
+
+    const current = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!current) {
+      return res.status(404).json({ error: "Pedido não encontrado." });
+    }
+
+    // Só permite avançar na ordem correta (sem pular/voltar), exceto cancelamento
+    if (current.status !== status && !isValidTransition(current.status, status)) {
+      logSecurityEvent("INVALID_ORDER_TRANSITION", {
+        adminId: req.admin.id,
+        orderId,
+        from: current.status,
+        to: status,
+      }, ip);
+      return res.status(409).json({
+        error: `Transição de status inválida: ${current.status} → ${status}.`,
+        from: current.status,
+        to: status,
+      });
     }
 
     const order = await prisma.order.update({
@@ -191,6 +223,9 @@ router.patch("/:id/status", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"),
       orderId,
       newStatus: status,
     }, ip);
+
+    // Notifica o painel em tempo real (room da loja)
+    emitPedidoStatus(order.lojaId, order);
 
     res.json(order);
   } catch (err) {
