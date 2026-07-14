@@ -33,7 +33,7 @@ function CategorySection({ title, items, priceField, onSave }) {
           <thead className="bg-flour-2 text-ink-soft text-xs uppercase tracking-wide">
             <tr>
               <th className="text-left px-4 py-3 font-semibold">Nome</th>
-              <th className="text-left px-4 py-3 font-semibold">Preço</th>
+              <th className="text-left px-4 py-3 font-semibold">Preço Adicional</th>
               <th className="text-left px-4 py-3 font-semibold">Disponível</th>
             </tr>
           </thead>
