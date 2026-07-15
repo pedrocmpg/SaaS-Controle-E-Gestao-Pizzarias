@@ -18,80 +18,83 @@ const ORDER_ROLES = ["SUPER_ADMIN", "ADMIN", "GERENTE", "ATENDENTE"];
 
 const VALID_STATUSES = ALL_STATUSES;
 
-/**
- * POST /api/orders
- * Cria um novo pedido. Rota pública (usada pelo checkout do site).
- * Telefone e endereço são criptografados antes de salvar.
- */
-router.post("/", orderLimiter, validateRequest(createOrderSchema), async (req, res, next) => {
-  try {
-    const {
-      customerName,
-      phone,
-      address,
-      deliveryType,
-      paymentMethod,
-      notes,
-      deliveryFee,
-      items,
-    } = req.body;
-
-    const itemsData = items.map((item) => {
-      const unitPrice = Number(item.unitPrice);
-      const quantity = Number(item.quantity) || 1;
-      return {
-        itemName: item.itemName,
-        itemType: item.itemType,
-        flavors: item.flavors || null,
-        borderName: item.borderName || null,
-        quantity,
-        unitPrice,
-        subtotal: unitPrice * quantity,
-        observations: item.observations || null,
-      };
-    });
-
-    const itemsTotal = itemsData.reduce((sum, i) => sum + i.subtotal, 0);
-    const fee = deliveryType === "RETIRADA" ? 0 : Number(deliveryFee) || 10;
-    const totalPrice = itemsTotal + fee;
-
-    // Loja de destino: hoje há uma única loja. Estrutura pronta p/ múltiplas lojas.
-    const loja = await prisma.loja.findFirst({ orderBy: { id: "asc" }, select: { id: true } });
-    if (!loja) {
-      return res.status(503).json({ error: "Nenhuma loja configurada. Execute o seed." });
-    }
-
-    const order = await prisma.order.create({
-      data: {
-        lojaId: loja.id,
-        customerName,
-        phone: encrypt(phone), // Criptografa telefone
-        address: address ? encrypt(address) : null, // Criptografa endereço
-        deliveryType: deliveryType || "ENTREGA",
-        paymentMethod,
-        notes: notes || null,
-        deliveryFee: fee,
-        totalPrice,
-        items: { create: itemsData },
-      },
-      include: { items: true },
-    });
-
-    // Descriptografa antes de retornar (para que cliente receba os dados legíveis)
-    const responseOrder = {
-      ...order,
-      phone: decrypt(order.phone),
-      address: order.address ? decrypt(order.address) : null,
-    };
-
-    // Notifica o painel em tempo real (room da loja)
-    emitPedidoNovo(order.lojaId, responseOrder);
-
-    res.status(201).json(responseOrder);
-  } catch (err) {
-    next(err);
-  }
-});
+// DESATIVADO temporariamente (jul/2026) — fluxo de vitrine pública para
+// cliente final. Projeto pivotou pra hub interno multi-tenant.
+// Manter código pronto pra reativação futura, não apagar.
+// /**
+//  * POST /api/orders
+//  * Cria um novo pedido. Rota pública (usada pelo checkout do site).
+//  * Telefone e endereço são criptografados antes de salvar.
+//  */
+// router.post("/", orderLimiter, validateRequest(createOrderSchema), async (req, res, next) => {
+//   try {
+//     const {
+//       customerName,
+//       phone,
+//       address,
+//       deliveryType,
+//       paymentMethod,
+//       notes,
+//       deliveryFee,
+//       items,
+//     } = req.body;
+//
+//     const itemsData = items.map((item) => {
+//       const unitPrice = Number(item.unitPrice);
+//       const quantity = Number(item.quantity) || 1;
+//       return {
+//         itemName: item.itemName,
+//         itemType: item.itemType,
+//         flavors: item.flavors || null,
+//         borderName: item.borderName || null,
+//         quantity,
+//         unitPrice,
+//         subtotal: unitPrice * quantity,
+//         observations: item.observations || null,
+//       };
+//     });
+//
+//     const itemsTotal = itemsData.reduce((sum, i) => sum + i.subtotal, 0);
+//     const fee = deliveryType === "RETIRADA" ? 0 : Number(deliveryFee) || 10;
+//     const totalPrice = itemsTotal + fee;
+//
+//     // Loja de destino: hoje há uma única loja. Estrutura pronta p/ múltiplas lojas.
+//     const loja = await prisma.loja.findFirst({ orderBy: { id: "asc" }, select: { id: true } });
+//     if (!loja) {
+//       return res.status(503).json({ error: "Nenhuma loja configurada. Execute o seed." });
+//     }
+//
+//     const order = await prisma.order.create({
+//       data: {
+//         lojaId: loja.id,
+//         customerName,
+//         phone: encrypt(phone), // Criptografa telefone
+//         address: address ? encrypt(address) : null, // Criptografa endereço
+//         deliveryType: deliveryType || "ENTREGA",
+//         paymentMethod,
+//         notes: notes || null,
+//         deliveryFee: fee,
+//         totalPrice,
+//         items: { create: itemsData },
+//       },
+//       include: { items: true },
+//     });
+//
+//     // Descriptografa antes de retornar (para que cliente receba os dados legíveis)
+//     const responseOrder = {
+//       ...order,
+//       phone: decrypt(order.phone),
+//       address: order.address ? decrypt(order.address) : null,
+//     };
+//
+//     // Notifica o painel em tempo real (room da loja)
+//     emitPedidoNovo(order.lojaId, responseOrder);
+//
+//     res.status(201).json(responseOrder);
+//   } catch (err) {
+//     next(err);
+//   }
+// });
 
 /**
  * GET /api/orders

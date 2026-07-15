@@ -1,10 +1,13 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import Layout from "./components/Layout";
-import Home from "./pages/Home";
-import Menu from "./pages/Menu";
-import About from "./pages/About";
-import Contact from "./pages/Contact";
-import Checkout from "./pages/Checkout";
+// DESATIVADO temporariamente (jul/2026) — fluxo de vitrine pública para
+// cliente final. Projeto pivotou pra hub interno multi-tenant.
+// Manter código pronto pra reativação futura, não apagar.
+// import Layout from "./components/Layout";
+// import Home from "./pages/Home";
+// import Menu from "./pages/Menu";
+// import About from "./pages/About";
+// import Contact from "./pages/Contact";
+// import Checkout from "./pages/Checkout";
 import AdminLogin from "./pages/admin/AdminLogin";
 import AdminKanban from "./pages/admin/AdminKanban";
 import AdminOperators from "./pages/admin/AdminOperators";
@@ -20,13 +23,17 @@ export default function App() {
   return (
     <ToastProvider>
       <Routes>
-        <Route element={<Layout />}>
+        {/* DESATIVADO temporariamente (jul/2026) — fluxo de vitrine pública para
+            cliente final. Projeto pivotou pra hub interno multi-tenant.
+            Manter código pronto pra reativação futura, não apagar. */}
+        {/* <Route element={<Layout />}>
           <Route path="/" element={<Home />} />
           <Route path="/cardapio" element={<Menu />} />
           <Route path="/sobre" element={<About />} />
           <Route path="/contato" element={<Contact />} />
           <Route path="/checkout" element={<Checkout />} />
-        </Route>
+        </Route> */}
+        <Route path="/" element={<Navigate to="/admin" replace />} />
 
         {/* Área administrativa (fora do layout público) */}
         <Route
