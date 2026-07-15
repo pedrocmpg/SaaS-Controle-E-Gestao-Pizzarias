@@ -1,11 +1,56 @@
-# E Tenho Ditto Pizzaria - Site + Sistema de Pedidos
+# Hub de Gestão para Pizzarias
 
-Site institucional com cardápio online, monta-pizza, carrinho, checkout via
-WhatsApp e painel administrativo para gerenciar pedidos.
+Hub interno de gestão (staff-facing, tipo "TEKNISA simplificado") para pizzarias.
+Modelo de negócio: mensalidade de R$500–1000/mês por pizzaria. Cliente-piloto: rede
+de 3-4 unidades no Rio Grande do Sul.
 
-- **Frontend**: React + Vite + Tailwind CSS
+> **Não é** um site/carrinho público para cliente final. Esse fluxo (vitrine,
+> monta-pizza, checkout self-service) existiu numa versão anterior do projeto e
+> foi arquivado — comentado no código, não deletado — após o pivô decidido em
+> conversa com o cliente-piloto. Não reativar sem pedido explícito.
+
+- **Frontend**: React + Vite (SPA) + React Router + Tailwind CSS
 - **Backend**: Node.js + Express + Prisma
-- **Banco de dados**: PostgreSQL (hospedado no [Supabase](https://supabase.com))
+- **Banco de dados**: PostgreSQL puro via `DATABASE_URL` (sem Supabase Auth nem
+  Supabase Storage)
+
+Para o contexto completo do projeto (arquitetura, decisões, pendências), ver
+[`CLAUDE.md`](./CLAUDE.md). Specs dos módulos:
+[`spec-1-modulo-pedidos-tele-entrega-spec.md`](./spec-1-modulo-pedidos-tele-entrega-spec.md),
+[`spec-2-modulo-pdv-salao-spec.md`](./spec-2-modulo-pdv-salao-spec.md),
+[`spec-3-modulo-motoboy-spec.md`](./spec-3-modulo-motoboy-spec.md).
+
+---
+
+## ⚠️ Arquitetura: multi-tenant real, não é rede matriz+filiais
+
+Os tenants são **pizzarias independentes**, concorrentes entre si na mesma
+região — não uma única rede com matriz e filiais. Isolamento de dados entre
+pizzarias diferentes é obrigatório e não-negociável.
+
+Desenvolvimento atual é focado em 1 pizzaria (o piloto), mas schema e
+arquitetura precisam já nascer prontos para receber outras pizzarias sem
+refatoração grande.
+
+**Pendência técnica ativa:** o cardápio (`PizzaSize`, `Flavor`, `Border`,
+`Product`) hoje é GLOBAL no banco, sem `lojaId`. Precisa ser corrigido antes de
+expandir para outro tenant — é o primeiro item da ordem de trabalho abaixo.
+
+---
+
+## Os 3 módulos do hub
+
+| Módulo | Status |
+|---|---|
+| **1. Pedidos / Tele-entrega** | Pronto pra atacar — spec completo disponível |
+| **2. PDV — Salão/Rodízio** | Escopo a confirmar com cliente (rodízio por pessoa ou fixo, catálogo de bebidas, caixa único ou separado) |
+| **3. Motoboy** — despacho + fechamento/sangria | 🚫 Bloqueado — aguardando 4 respostas do cliente sobre a lógica de fechamento |
+
+### Ordem de trabalho sugerida
+1. Adicionar `lojaId` ao cardápio — destrava multi-tenant real
+2. Módulo Pedidos/tele-entrega completo
+3. Módulo PDV/salão
+4. Módulo Motoboy — só quando o cliente responder as 4 perguntas de fechamento
 
 ---
 
@@ -14,23 +59,17 @@ WhatsApp e painel administrativo para gerenciar pedidos.
 ```
 .
 ├── backend/     API REST (Express + Prisma)
-└── frontend/    Site (React + Vite + Tailwind)
+└── frontend/    Hub de gestão (React + Vite + Tailwind)
 ```
 
 ---
 
-## 1. Configurando o banco de dados no Supabase
+## 1. Configurando o banco de dados
 
-1. Crie uma conta em [supabase.com](https://supabase.com) e crie um novo projeto
-   (escolha uma senha forte para o banco - guarde ela).
-2. No painel do projeto, vá em **Project Settings → Database**.
-3. Copie as duas connection strings:
-   - **Connection pooling** (porta `6543`) → vai na variável `DATABASE_URL`
-   - **Direct connection** (porta `5432`) → vai na variável `DIRECT_URL`
-4. Cole essas strings no arquivo `backend/.env` (veja o passo 2 abaixo).
-
-> A conexão via pooling é usada em produção/runtime. A conexão direta é
-> usada apenas pelo Prisma para rodar migrations.
+O projeto usa PostgreSQL puro (não depende de Supabase Auth/Storage — só do
+Postgres via `DATABASE_URL`). Pode ser uma instância local, um Postgres gerenciado
+(Supabase, Railway, RDS etc.) ou qualquer outro provedor — o que importa é a
+connection string.
 
 ---
 
@@ -41,22 +80,24 @@ cd backend
 cp .env.example .env
 ```
 
-Edite o arquivo `backend/.env` e preencha:
+Edite o arquivo `backend/.env` e preencha pelo menos:
 
 ```
-DATABASE_URL="postgresql://postgres:[SUA_SENHA]@[SEU_PROJETO].pooler.supabase.com:6543/postgres?pgbouncer=true"
-DIRECT_URL="postgresql://postgres:[SUA_SENHA]@db.[SEU_PROJETO].supabase.co:5432/postgres"
-JWT_SECRET="gere-uma-string-aleatoria-longa-aqui"
-ADMIN_EMAIL="seu-email@exemplo.com"
-ADMIN_PASSWORD="uma-senha-forte-para-o-painel"
+DATABASE_URL="postgresql://usuario:senha@host:porta/banco"
+JWT_SECRET="gere-uma-string-aleatoria-longa-aqui"   # node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+FRONTEND_URL="http://localhost:5173"
+REDIS_URL="redis://localhost:6379"
 ```
+
+Veja `backend/.env.example` para a lista completa de variáveis (CORS whitelist,
+2FA/TOTP, Redis para blacklist de tokens, etc.).
 
 Instale as dependências e crie as tabelas no banco:
 
 ```bash
 npm install
-npm run prisma:migrate   # cria as tabelas no Supabase
-npm run seed              # popula o cardápio completo + cria o usuário admin
+npm run prisma:migrate   # cria/atualiza as tabelas
+npm run seed              # popula dados iniciais + cria o admin
 ```
 
 Inicie o servidor:
@@ -65,20 +106,7 @@ Inicie o servidor:
 npm run dev
 ```
 
-A API vai rodar em `http://localhost:3333`. Teste em `http://localhost:3333/api/health`.
-
-### Rotas principais da API
-
-| Método | Rota                      | Descrição                              | Protegida |
-|--------|---------------------------|-----------------------------------------|-----------|
-| GET    | `/api/catalog`             | Tamanhos, sabores, bordas e produtos    | Não       |
-| GET    | `/api/settings`            | Dados da loja (endereço, horários...)   | Não       |
-| POST   | `/api/orders`               | Cria um novo pedido                     | Não       |
-| POST   | `/api/auth/login`           | Login do admin                          | Não       |
-| GET    | `/api/orders`               | Lista pedidos                           | Sim       |
-| PATCH  | `/api/orders/:id/status`    | Atualiza status de um pedido            | Sim       |
-| POST/PUT/DELETE | `/api/catalog/*`  | Gerencia sabores, bordas, produtos      | Sim       |
-| PUT    | `/api/settings`             | Atualiza dados da loja                  | Sim       |
+A API roda em `http://localhost:3333`. Teste em `http://localhost:3333/api/health`.
 
 ---
 
@@ -91,63 +119,51 @@ npm install
 npm run dev
 ```
 
-O site abre em `http://localhost:5173`.
-
-Se o `VITE_API_URL` no `.env` do frontend não apontar para o backend correto,
-edite a linha:
+O hub abre em `http://localhost:5173`. Se `VITE_API_URL` não apontar para o
+backend correto, edite `frontend/.env`:
 
 ```
 VITE_API_URL=http://localhost:3333/api
 ```
 
-> **Modo vitrine**: se o backend/banco ainda não estiver configurado, o site
-> continua funcionando com dados de exemplo fictícios (fallback) para fins de
-> apresentação. O cardápio (`/cardapio`) precisa do backend rodando, pois os
-> sabores vêm do banco.
+---
+
+## 4. Autenticação e papéis (roles)
+
+Auth própria (JWT em cookie HttpOnly + Bearer opcional), bcrypt, 2FA via TOTP
+com backup codes. Audit log (`AuditLog`) registra ações de admins.
+
+Roles: `SUPER_ADMIN`, `ADMIN`, `GERENTE`, `ATENDENTE`.
+
+- `GERENTE` e `ATENDENTE` já têm acesso liberado nas rotas operacionais
+  (`/admin/dashboard`, `/operacao/*`, incluindo `/operacao/pedidos`).
+- Só `/admin/operadores` (cadastro de operadores) é restrita a `SUPER_ADMIN`.
+
+Login em `http://localhost:5173/admin` com e-mail/senha definidos em
+`ADMIN_EMAIL` / `ADMIN_PASSWORD` (usados no `npm run seed`).
 
 ---
 
-## 4. Acessando o Painel Administrativo
+## 5. Deploy (sugestão)
 
-Acesse `http://localhost:5173/admin` e entre com o e-mail/senha definidos em
-`ADMIN_EMAIL` / `ADMIN_PASSWORD` no `.env` do backend (usados no `npm run seed`).
+- **Backend**: Render ou Railway
+- **Frontend**: Vercel ou Netlify
+- **Banco**: qualquer Postgres gerenciado
 
-No painel é possível:
-- Ver todos os pedidos recebidos
-- Filtrar por status
-- Atualizar o status do pedido (Pendente → Confirmado → Em preparo → Saiu para entrega → Entregue)
-
----
-
-## 5. Dados fictícios usados (ajustar antes de publicar)
-
-- **Telefone/WhatsApp**: `5554999999999` — número fictício, atualizar em
-  `StoreSettings` (via painel ou editando `backend/prisma/seed.js` e rodando
-  `npm run seed` novamente).
-- **Taxa de entrega**: R$ 10 a R$ 20 (informado pelo cliente)
-- **Tempo de entrega**: 40 a 70 min (informado pelo cliente)
-
----
-
-## 6. Deploy (sugestão)
-
-- **Backend**: [Render](https://render.com) ou [Railway](https://railway.app) (grátis para projetos pequenos)
-- **Frontend**: [Vercel](https://vercel.com) ou [Netlify](https://netlify.com)
-- **Banco**: já está no Supabase
-
-Lembre-se de configurar as variáveis de ambiente (`DATABASE_URL`, `DIRECT_URL`,
-`JWT_SECRET`, `FRONTEND_URL`) no serviço de hospedagem do backend, e
+Configure as variáveis de ambiente (`DATABASE_URL`, `JWT_SECRET`,
+`FRONTEND_URL`, `REDIS_URL`) no serviço de hospedagem do backend, e
 `VITE_API_URL` apontando para a URL pública da API no serviço do frontend.
 
 ---
 
-## 7. Scripts úteis
+## 6. Scripts úteis
 
 **Backend** (`backend/`):
 ```bash
 npm run dev              # servidor em modo desenvolvimento
-npm run prisma:migrate   # cria/atualiza tabelas no banco
-npm run seed              # repopula cardápio e recria o admin
+npm run prisma:migrate   # cria/atualiza tabelas no banco (dev)
+npm run prisma:deploy    # aplica migrations (produção)
+npm run seed              # popula dados iniciais e recria o admin
 ```
 
 **Frontend** (`frontend/`):
@@ -156,3 +172,13 @@ npm run dev      # servidor de desenvolvimento
 npm run build    # build de produção (gera pasta dist/)
 npm run lint     # verifica problemas no código
 ```
+
+---
+
+## Fora de escopo (não construir sem pedir)
+
+- Emissão fiscal (NFC-e/NF-e)
+- Integração real com Microsip (CTI), iFood, Anota Aí, WhatsApp Business API —
+  tudo fase 2
+- Qualquer coisa do fluxo de cliente final (vitrine pública, carrinho
+  self-service) — arquivada, comentada no código, não deletada
