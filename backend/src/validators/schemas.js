@@ -52,12 +52,19 @@ const createOrderSchema = Joi.object({
     .messages({
       "any.only": "Tipo de entrega deve ser ENTREGA ou RETIRADA",
     }),
+  // Uma única forma de pagamento por pedido (decisão de negócio).
   paymentMethod: Joi.string()
-    .valid("DINHEIRO", "CARTAO", "PIX", "WHATSAPP")
+    .valid("DINHEIRO", "PIX", "CARTAO_CREDITO", "CARTAO_DEBITO")
     .required()
     .messages({
       "any.only": "Forma de pagamento inválida",
     }),
+  // Origem do pedido. Fase 1 só usa TELEFONE; default aplicado no backend.
+  origem: Joi.string()
+    .valid("TELEFONE", "IFOOD", "ANOTA_AI", "WHATSAPP", "BALCAO")
+    .optional(),
+  // SUPER_ADMIN global pode indicar a loja; operador vinculado ignora este campo.
+  lojaId: Joi.number().integer().positive().optional(),
   notes: Joi.string()
     .max(500)
     .allow(null, ""),
@@ -72,11 +79,13 @@ const createOrderSchema = Joi.object({
           .min(1)
           .max(100)
           .required(),
+        // Alinhado ao OrderItem.itemType do Prisma (MONTAVEL | COMBO | BEBIDA | ESPECIAL).
         itemType: Joi.string()
-          .valid("PIZZA", "PRODUTO", "BEBIDA")
+          .valid("MONTAVEL", "COMBO", "BEBIDA", "ESPECIAL")
           .required(),
-        flavors: Joi.string()
-          .max(255)
+        // flavors é Json no Prisma (array de nomes). Aceita array ou string legada.
+        flavors: Joi.alternatives()
+          .try(Joi.array().items(Joi.string().max(100)), Joi.string().max(255))
           .allow(null, ""),
         borderName: Joi.string()
           .max(100)
@@ -254,6 +263,98 @@ const productPatchSchema = Joi.object({
   active: Joi.boolean(),
 }).min(1);
 
+/**
+ * Schema para adicionar item a uma comanda de salão (rodízio por faixa ou produto/bebida)
+ */
+const adicionarItemComandaSchema = Joi.object({
+  tipo: Joi.string()
+    .valid("RODIZIO", "PRODUTO")
+    .required()
+    .messages({
+      "any.only": "Tipo de item deve ser RODIZIO ou PRODUTO",
+      "any.required": "Tipo de item é obrigatório",
+    }),
+  faixaRodizio: Joi.string()
+    .valid("ADULTO", "CRIANCA", "MEIA")
+    .when("tipo", { is: "RODIZIO", then: Joi.required(), otherwise: Joi.forbidden() }),
+  productId: Joi.number()
+    .integer()
+    .positive()
+    .when("tipo", { is: "PRODUTO", then: Joi.required(), otherwise: Joi.forbidden() }),
+  quantity: Joi.number()
+    .positive()
+    .max(100)
+    .required(),
+});
+
+/**
+ * Schema para fechar uma comanda de salão (uma única forma de pagamento)
+ */
+const fecharComandaSchema = Joi.object({
+  paymentMethod: Joi.string()
+    .valid("DINHEIRO", "PIX", "CARTAO_CREDITO", "CARTAO_DEBITO")
+    .required()
+    .messages({
+      "any.only": "Forma de pagamento inválida",
+      "any.required": "Forma de pagamento é obrigatória",
+    }),
+});
+
+/**
+ * Schema para abrir uma sessão de caixa (salão ou tele-entrega)
+ */
+const abrirCaixaSchema = Joi.object({
+  tipo: Joi.string()
+    .valid("SALAO", "TELE_ENTREGA")
+    .required()
+    .messages({
+      "any.only": "Tipo de caixa deve ser SALAO ou TELE_ENTREGA",
+      "any.required": "Tipo de caixa é obrigatório",
+    }),
+  fundoTroco: Joi.number()
+    .min(0)
+    .max(99999.99)
+    .required()
+    .messages({
+      "any.required": "Fundo de troco é obrigatório",
+    }),
+});
+
+/**
+ * Schema para sangria/suprimento — motivo é obrigatório (auditoria)
+ */
+const movimentoCaixaSchema = Joi.object({
+  valor: Joi.number()
+    .positive()
+    .max(99999.99)
+    .required()
+    .messages({
+      "any.required": "Valor é obrigatório",
+    }),
+  motivo: Joi.string()
+    .min(1)
+    .max(255)
+    .trim()
+    .required()
+    .messages({
+      "string.empty": "Motivo é obrigatório",
+      "any.required": "Motivo é obrigatório",
+    }),
+});
+
+/**
+ * Schema para conferência do caixa no dia seguinte (saldo contado)
+ */
+const conferirCaixaSchema = Joi.object({
+  saldoFinalContado: Joi.number()
+    .min(0)
+    .max(99999.99)
+    .required()
+    .messages({
+      "any.required": "Saldo contado é obrigatório",
+    }),
+});
+
 module.exports = {
   loginSchema,
   createOrderSchema,
@@ -267,4 +368,9 @@ module.exports = {
   flavorPatchSchema,
   borderPatchSchema,
   productPatchSchema,
+  adicionarItemComandaSchema,
+  fecharComandaSchema,
+  abrirCaixaSchema,
+  movimentoCaixaSchema,
+  conferirCaixaSchema,
 };

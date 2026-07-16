@@ -1,6 +1,7 @@
 const express = require("express");
 const prisma = require("../lib/prisma");
-const { encrypt, decrypt } = require("../lib/encryption");
+const { encrypt, decrypt, hashPhone } = require("../lib/encryption");
+const { resolveLojaId } = require("../lib/lojaScope");
 const { requireAuth } = require("../middleware/auth");
 const { requireAnyRole } = require("../middleware/authorization");
 const { orderLimiter, adminReadLimiter, adminWriteLimiter } = require("../middleware/rateLimiter");
@@ -18,83 +19,150 @@ const ORDER_ROLES = ["SUPER_ADMIN", "ADMIN", "GERENTE", "ATENDENTE"];
 
 const VALID_STATUSES = ALL_STATUSES;
 
-// DESATIVADO temporariamente (jul/2026) — fluxo de vitrine pública para
-// cliente final. Projeto pivotou pra hub interno multi-tenant.
-// Manter código pronto pra reativação futura, não apagar.
-// /**
-//  * POST /api/orders
-//  * Cria um novo pedido. Rota pública (usada pelo checkout do site).
-//  * Telefone e endereço são criptografados antes de salvar.
-//  */
-// router.post("/", orderLimiter, validateRequest(createOrderSchema), async (req, res, next) => {
-//   try {
-//     const {
-//       customerName,
-//       phone,
-//       address,
-//       deliveryType,
-//       paymentMethod,
-//       notes,
-//       deliveryFee,
-//       items,
-//     } = req.body;
-//
-//     const itemsData = items.map((item) => {
-//       const unitPrice = Number(item.unitPrice);
-//       const quantity = Number(item.quantity) || 1;
-//       return {
-//         itemName: item.itemName,
-//         itemType: item.itemType,
-//         flavors: item.flavors || null,
-//         borderName: item.borderName || null,
-//         quantity,
-//         unitPrice,
-//         subtotal: unitPrice * quantity,
-//         observations: item.observations || null,
-//       };
-//     });
-//
-//     const itemsTotal = itemsData.reduce((sum, i) => sum + i.subtotal, 0);
-//     const fee = deliveryType === "RETIRADA" ? 0 : Number(deliveryFee) || 10;
-//     const totalPrice = itemsTotal + fee;
-//
-//     // Loja de destino: hoje há uma única loja. Estrutura pronta p/ múltiplas lojas.
-//     const loja = await prisma.loja.findFirst({ orderBy: { id: "asc" }, select: { id: true } });
-//     if (!loja) {
-//       return res.status(503).json({ error: "Nenhuma loja configurada. Execute o seed." });
-//     }
-//
-//     const order = await prisma.order.create({
-//       data: {
-//         lojaId: loja.id,
-//         customerName,
-//         phone: encrypt(phone), // Criptografa telefone
-//         address: address ? encrypt(address) : null, // Criptografa endereço
-//         deliveryType: deliveryType || "ENTREGA",
-//         paymentMethod,
-//         notes: notes || null,
-//         deliveryFee: fee,
-//         totalPrice,
-//         items: { create: itemsData },
-//       },
-//       include: { items: true },
-//     });
-//
-//     // Descriptografa antes de retornar (para que cliente receba os dados legíveis)
-//     const responseOrder = {
-//       ...order,
-//       phone: decrypt(order.phone),
-//       address: order.address ? decrypt(order.address) : null,
-//     };
-//
-//     // Notifica o painel em tempo real (room da loja)
-//     emitPedidoNovo(order.lojaId, responseOrder);
-//
-//     res.status(201).json(responseOrder);
-//   } catch (err) {
-//     next(err);
-//   }
-// });
+/**
+ * POST /api/orders
+ * Cria um pedido de tele-entrega pelo ATENDENTE autenticado (fluxo interno).
+ * - lojaId resolvido do operador (isolamento multi-tenant).
+ * - Telefone/endereço criptografados no Order; Cliente upsertado por telefone (histórico).
+ * - Notifica o painel da loja em tempo real via WebSocket.
+ */
+router.post("/", requireAuth, requireAnyRole(...ORDER_ROLES), adminWriteLimiter, validateRequest(createOrderSchema), async (req, res, next) => {
+  try {
+    const {
+      customerName,
+      phone,
+      address,
+      deliveryType,
+      paymentMethod,
+      notes,
+      deliveryFee,
+      items,
+      origem,
+    } = req.body;
+    const ip = req.ip || req.connection.remoteAddress;
+
+    const lojaId = await resolveLojaId(req);
+    if (lojaId == null) {
+      return res.status(400).json({ error: "Nenhuma loja associada a esta requisição." });
+    }
+
+    const itemsData = items.map((item) => {
+      const unitPrice = Number(item.unitPrice);
+      const quantity = Number(item.quantity) || 1;
+      return {
+        itemName: item.itemName,
+        itemType: item.itemType,
+        flavors: item.flavors || null,
+        borderName: item.borderName || null,
+        quantity,
+        unitPrice,
+        subtotal: unitPrice * quantity,
+        observations: item.observations || null,
+      };
+    });
+
+    const itemsTotal = itemsData.reduce((sum, i) => sum + i.subtotal, 0);
+    // Taxa de entrega: valor fixo digitado pelo atendente. RETIRADA não cobra taxa.
+    const fee = deliveryType === "RETIRADA" ? 0 : Number(deliveryFee) || 0;
+    const totalPrice = itemsTotal + fee;
+
+    // Cliente/histórico por telefone, isolado por loja (mesmo telefone em outra loja = outro cliente).
+    const phoneHash = hashPhone(phone);
+    let cliente = null;
+    if (phoneHash) {
+      cliente = await prisma.cliente.upsert({
+        where: { lojaId_phoneHash: { lojaId, phoneHash } },
+        update: {
+          name: customerName,
+          ...(address ? { address: encrypt(address) } : {}),
+        },
+        create: {
+          lojaId,
+          phoneHash,
+          name: customerName,
+          address: address ? encrypt(address) : null,
+        },
+      });
+    }
+
+    const order = await prisma.order.create({
+      data: {
+        lojaId,
+        customerName,
+        phone: encrypt(phone), // Criptografa telefone
+        address: address ? encrypt(address) : null, // Criptografa endereço
+        deliveryType: deliveryType || "ENTREGA",
+        paymentMethod,
+        notes: notes || null,
+        origem: origem || "TELEFONE",
+        deliveryFee: fee,
+        totalPrice,
+        atendenteId: req.admin.id,
+        clienteId: cliente ? cliente.id : null,
+        items: { create: itemsData },
+      },
+      include: { items: true },
+    });
+
+    // Descriptografa antes de retornar (dados legíveis para o painel)
+    const responseOrder = {
+      ...order,
+      phone: decrypt(order.phone),
+      address: order.address ? decrypt(order.address) : null,
+    };
+
+    logSecurityEvent("CREATE_ORDER", { adminId: req.admin.id, orderId: order.id, lojaId }, ip);
+
+    // Notifica o painel em tempo real (room da loja)
+    emitPedidoNovo(order.lojaId, responseOrder);
+
+    res.status(201).json(responseOrder);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/orders/cliente/lookup?phone=
+ * Busca o cliente por telefone (isolado por loja) para auto-preencher o pedido.
+ * Definida antes de GET /:id para não colidir com o parâmetro.
+ */
+router.get("/cliente/lookup", requireAuth, requireAnyRole(...ORDER_ROLES), adminReadLimiter, async (req, res, next) => {
+  try {
+    const { phone } = req.query;
+    if (!phone) {
+      return res.status(400).json({ error: "Telefone é obrigatório." });
+    }
+
+    const lojaId = await resolveLojaId(req);
+    if (lojaId == null) {
+      return res.status(400).json({ error: "Nenhuma loja associada a esta requisição." });
+    }
+
+    const phoneHash = hashPhone(phone);
+    if (!phoneHash) {
+      return res.json({ found: false });
+    }
+
+    const cliente = await prisma.cliente.findUnique({
+      where: { lojaId_phoneHash: { lojaId, phoneHash } },
+    });
+
+    if (!cliente) {
+      return res.json({ found: false });
+    }
+
+    res.json({
+      found: true,
+      cliente: {
+        name: cliente.name,
+        address: cliente.address ? decrypt(cliente.address) : null,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 /**
  * GET /api/orders
@@ -114,7 +182,10 @@ router.get("/", requireAuth, requireAnyRole(...ORDER_ROLES), adminReadLimiter, a
     if (status && VALID_STATUSES.includes(String(status).toUpperCase())) {
       where.status = String(status).toUpperCase();
     }
-    if (lojaId && !isNaN(parseInt(lojaId))) {
+    // Isolamento: operador vinculado só vê a própria loja; SUPER_ADMIN global pode filtrar por ?lojaId.
+    if (req.admin.lojaId != null) {
+      where.lojaId = req.admin.lojaId;
+    } else if (lojaId && !isNaN(parseInt(lojaId))) {
       where.lojaId = parseInt(lojaId);
     }
 
@@ -156,11 +227,17 @@ router.get("/reports/today", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN",
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
+    const reportWhere = {
+      createdAt: { gte: startOfDay },
+      status: { not: "CANCELADO" },
+    };
+    // Operador vinculado só soma a própria loja.
+    if (req.admin.lojaId != null) {
+      reportWhere.lojaId = req.admin.lojaId;
+    }
+
     const orders = await prisma.order.findMany({
-      where: {
-        createdAt: { gte: startOfDay },
-        status: { not: "CANCELADO" },
-      },
+      where: reportWhere,
       select: { totalPrice: true },
     });
 
@@ -199,6 +276,11 @@ router.get("/:id", requireAuth, requireAnyRole(...ORDER_ROLES), adminReadLimiter
       return res.status(404).json({ error: "Pedido não encontrado." });
     }
 
+    // Isolamento: operador não pode ver pedido de outra loja.
+    if (req.admin.lojaId != null && order.lojaId !== req.admin.lojaId) {
+      return res.status(404).json({ error: "Pedido não encontrado." });
+    }
+
     // Descriptografa dados sensíveis
     const decryptedOrder = {
       ...order,
@@ -230,6 +312,11 @@ router.patch("/:id/status", requireAuth, requireAnyRole(...ORDER_ROLES), adminWr
 
     const current = await prisma.order.findUnique({ where: { id: orderId } });
     if (!current) {
+      return res.status(404).json({ error: "Pedido não encontrado." });
+    }
+
+    // Isolamento: operador não pode alterar pedido de outra loja.
+    if (req.admin.lojaId != null && current.lojaId !== req.admin.lojaId) {
       return res.status(404).json({ error: "Pedido não encontrado." });
     }
 

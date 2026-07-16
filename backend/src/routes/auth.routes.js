@@ -89,11 +89,12 @@ router.post("/login", loginLimiter, validateRequest(loginSchema), async (req, re
     logLoginAttempt(email, true, ip, req.get("user-agent"));
 
     const token = jwt.sign(
-      { 
-        id: admin.id, 
-        email: admin.email, 
+      {
+        id: admin.id,
+        email: admin.email,
         name: admin.name,
         role: admin.role || "VIEWER",
+        lojaId: admin.lojaId ?? null,
       },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || "8h" }
@@ -115,7 +116,7 @@ router.post("/login", loginLimiter, validateRequest(loginSchema), async (req, re
     res.json({
       status: "SUCCESS",
       expiresIn: process.env.JWT_EXPIRES_IN || "8h",
-      admin: { id: admin.id, name: admin.name, email: admin.email, role: admin.role || "VIEWER" },
+      admin: { id: admin.id, name: admin.name, email: admin.email, role: admin.role || "VIEWER", lojaId: admin.lojaId ?? null },
       token,
     });
   } catch (err) {
@@ -139,6 +140,7 @@ router.get("/me", requireAuth, async (req, res, next) => {
         name: true,
         email: true,
         role: true,
+        lojaId: true,
         totpEnabled: true,
         lastLoginAt: true,
         lastLoginIp: true,

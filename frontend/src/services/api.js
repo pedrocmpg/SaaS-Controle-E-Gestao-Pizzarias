@@ -58,6 +58,28 @@ export const ordersService = {
   getById: (id) => api.get(`/orders/${id}`).then((r) => r.data),
   updateStatus: (id, status) => api.patch(`/orders/${id}/status`, { status }).then((r) => r.data),
   getTodayReport: () => api.get("/orders/reports/today").then((r) => r.data),
+  lookupCliente: (phone) => api.get("/orders/cliente/lookup", { params: { phone } }).then((r) => r.data),
+};
+
+export const salaoService = {
+  getMesas: () => api.get("/salao/mesas").then((r) => r.data),
+  abrirMesa: (numero) => api.post(`/salao/mesas/${numero}/abrir`).then((r) => r.data),
+  getComanda: (id) => api.get(`/salao/comandas/${id}`).then((r) => r.data),
+  addItem: (comandaId, item) => api.post(`/salao/comandas/${comandaId}/itens`, item).then((r) => r.data),
+  removeItem: (comandaId, itemId) => api.delete(`/salao/comandas/${comandaId}/itens/${itemId}`).then((r) => r.data),
+  fecharComanda: (id, paymentMethod) => api.post(`/salao/comandas/${id}/fechar`, { paymentMethod }).then((r) => r.data),
+  getRodizioPrecos: () => api.get("/salao/rodizio/precos").then((r) => r.data),
+  patchRodizioPreco: (faixa, data) => api.put(`/salao/rodizio/precos/${faixa}`, data).then((r) => r.data),
+};
+
+export const caixaService = {
+  getAtual: (tipo = "SALAO") => api.get("/caixa/atual", { params: { tipo } }).then((r) => r.data),
+  abrir: (data) => api.post("/caixa/abrir", data).then((r) => r.data),
+  sangria: (id, data) => api.post(`/caixa/${id}/sangria`, data).then((r) => r.data),
+  suprimento: (id, data) => api.post(`/caixa/${id}/suprimento`, data).then((r) => r.data),
+  fechar: (id) => api.post(`/caixa/${id}/fechar`).then((r) => r.data),
+  conferir: (id, data) => api.post(`/caixa/${id}/conferir`, data).then((r) => r.data),
+  getHistorico: () => api.get("/caixa/historico").then((r) => r.data),
 };
 
 export const authService = {

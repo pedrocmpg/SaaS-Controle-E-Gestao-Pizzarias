@@ -16,6 +16,8 @@ import OperacaoLayout from "./pages/operacao/OperacaoLayout";
 import OperacaoPedidos from "./pages/operacao/OperacaoPedidos";
 import OperacaoCardapio from "./pages/operacao/OperacaoCardapio";
 import OperacaoRelatorio from "./pages/operacao/OperacaoRelatorio";
+import OperacaoSalao from "./pages/operacao/OperacaoSalao";
+import OperacaoCaixa from "./pages/operacao/OperacaoCaixa";
 import { AdminAuthProvider } from "./context/AdminAuthContext";
 import { ToastProvider } from "./components/ui";
 
@@ -95,6 +97,8 @@ function OperacaoRoutes() {
         }
       >
         <Route path="/pedidos" element={<OperacaoPedidos />} />
+        <Route path="/salao" element={<OperacaoSalao />} />
+        <Route path="/caixa" element={<OperacaoCaixa />} />
         <Route
           path="/cardapio"
           element={

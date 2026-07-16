@@ -16,20 +16,55 @@ const {
   productPatchSchema,
 } = require("../validators/schemas");
 const { logSecurityEvent } = require("../lib/securityLogger");
+const { resolveLojaId } = require("../lib/lojaScope");
 
 const router = express.Router();
+
+// Roles que podem consultar o cardápio (inclui ATENDENTE p/ montar pedidos).
+const CATALOG_READ_ROLES = ["SUPER_ADMIN", "ADMIN", "GERENTE", "ATENDENTE"];
+// Roles que podem editar o cardápio.
+const CATALOG_WRITE_ROLES = ["SUPER_ADMIN", "ADMIN", "GERENTE"];
+
+/**
+ * Middleware: resolve e anexa o lojaId efetivo do operador (isolamento multi-tenant).
+ */
+async function attachLojaId(req, res, next) {
+  try {
+    req.lojaId = await resolveLojaId(req);
+    if (req.lojaId == null) {
+      return res.status(400).json({ error: "Nenhuma loja associada a esta requisição." });
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Garante que o registro pertence à loja do operador antes de alterar/excluir.
+ * Retorna true se ok; caso contrário responde 404 e retorna false.
+ */
+async function ensureOwned(model, id, lojaId, res) {
+  const found = await prisma[model].findFirst({ where: { id, lojaId }, select: { id: true } });
+  if (!found) {
+    res.status(404).json({ error: "Registro não encontrado nesta loja." });
+    return false;
+  }
+  return true;
+}
 
 /**
  * GET /api/catalog
  * Retorna todo o catálogo de uma vez.
  */
-router.get("/", async (req, res, next) => {
+router.get("/", requireAuth, requireAnyRole(...CATALOG_READ_ROLES), adminReadLimiter, attachLojaId, async (req, res, next) => {
   try {
+    const { lojaId } = req;
     const [pizzaSizes, flavors, borders, products] = await Promise.all([
-      prisma.pizzaSize.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
-      prisma.flavor.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
-      prisma.border.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
-      prisma.product.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
+      prisma.pizzaSize.findMany({ where: { lojaId, active: true }, orderBy: { order: "asc" } }),
+      prisma.flavor.findMany({ where: { lojaId, active: true }, orderBy: { order: "asc" } }),
+      prisma.border.findMany({ where: { lojaId, active: true }, orderBy: { order: "asc" } }),
+      prisma.product.findMany({ where: { lojaId, active: true }, orderBy: { order: "asc" } }),
     ]);
 
     res.json({ pizzaSizes, flavors, borders, products });
@@ -39,20 +74,20 @@ router.get("/", async (req, res, next) => {
 });
 
 // ---------- Pizza Sizes ----------
-router.get("/sizes", adminReadLimiter, async (req, res, next) => {
+router.get("/sizes", requireAuth, requireAnyRole(...CATALOG_READ_ROLES), adminReadLimiter, attachLojaId, async (req, res, next) => {
   try {
-    const sizes = await prisma.pizzaSize.findMany({ orderBy: { order: "asc" } });
+    const sizes = await prisma.pizzaSize.findMany({ where: { lojaId: req.lojaId }, orderBy: { order: "asc" } });
     res.json(sizes);
   } catch (err) {
     next(err);
   }
 });
 
-router.post("/sizes", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("PizzaSize"), validateRequest(pizzaSizeSchema), async (req, res, next) => {
+router.post("/sizes", requireAuth, requireAnyRole(...CATALOG_WRITE_ROLES), adminWriteLimiter, attachLojaId, auditCatalogChange("PizzaSize"), validateRequest(pizzaSizeSchema), async (req, res, next) => {
   try {
     const ip = req.ip || req.connection.remoteAddress;
 
-    const size = await prisma.pizzaSize.create({ data: req.body });
+    const size = await prisma.pizzaSize.create({ data: { ...req.body, lojaId: req.lojaId } });
 
     logSecurityEvent("CREATE_PIZZA_SIZE", { adminId: req.admin.id, sizeId: size.id }, ip);
 
@@ -62,7 +97,7 @@ router.post("/sizes", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GEREN
   }
 });
 
-router.put("/sizes/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("PizzaSize"), validateRequest(pizzaSizeSchema), async (req, res, next) => {
+router.put("/sizes/:id", requireAuth, requireAnyRole(...CATALOG_WRITE_ROLES), adminWriteLimiter, attachLojaId, auditCatalogChange("PizzaSize"), validateRequest(pizzaSizeSchema), async (req, res, next) => {
   try {
     const sizeId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;
@@ -70,6 +105,8 @@ router.put("/sizes/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GE
     if (isNaN(sizeId)) {
       return res.status(400).json({ error: "ID inválido" });
     }
+
+    if (!(await ensureOwned("pizzaSize", sizeId, req.lojaId, res))) return;
 
     const size = await prisma.pizzaSize.update({
       where: { id: sizeId },
@@ -88,7 +125,7 @@ router.put("/sizes/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GE
  * PATCH /api/catalog/sizes/:id
  * Edição parcial (preço/disponibilidade) — usada pela tela de Cardápio do operador.
  */
-router.patch("/sizes/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("PizzaSize"), validateRequest(pizzaSizePatchSchema), async (req, res, next) => {
+router.patch("/sizes/:id", requireAuth, requireAnyRole(...CATALOG_WRITE_ROLES), adminWriteLimiter, attachLojaId, auditCatalogChange("PizzaSize"), validateRequest(pizzaSizePatchSchema), async (req, res, next) => {
   try {
     const sizeId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;
@@ -96,6 +133,8 @@ router.patch("/sizes/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "
     if (isNaN(sizeId)) {
       return res.status(400).json({ error: "ID inválido" });
     }
+
+    if (!(await ensureOwned("pizzaSize", sizeId, req.lojaId, res))) return;
 
     const size = await prisma.pizzaSize.update({
       where: { id: sizeId },
@@ -110,7 +149,7 @@ router.patch("/sizes/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "
   }
 });
 
-router.delete("/sizes/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("PizzaSize"), async (req, res, next) => {
+router.delete("/sizes/:id", requireAuth, requireAnyRole(...CATALOG_WRITE_ROLES), adminWriteLimiter, attachLojaId, auditCatalogChange("PizzaSize"), async (req, res, next) => {
   try {
     const sizeId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;
@@ -118,6 +157,8 @@ router.delete("/sizes/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", 
     if (isNaN(sizeId)) {
       return res.status(400).json({ error: "ID inválido" });
     }
+
+    if (!(await ensureOwned("pizzaSize", sizeId, req.lojaId, res))) return;
 
     await prisma.pizzaSize.delete({ where: { id: sizeId } });
 
@@ -130,11 +171,11 @@ router.delete("/sizes/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", 
 });
 
 // ---------- Flavors ----------
-router.get("/flavors", adminReadLimiter, async (req, res, next) => {
+router.get("/flavors", requireAuth, requireAnyRole(...CATALOG_READ_ROLES), adminReadLimiter, attachLojaId, async (req, res, next) => {
   try {
     const { type } = req.query;
     const flavors = await prisma.flavor.findMany({
-      where: type ? { type: String(type).toUpperCase() } : undefined,
+      where: { lojaId: req.lojaId, ...(type ? { type: String(type).toUpperCase() } : {}) },
       orderBy: { order: "asc" },
     });
     res.json(flavors);
@@ -143,11 +184,11 @@ router.get("/flavors", adminReadLimiter, async (req, res, next) => {
   }
 });
 
-router.post("/flavors", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("Flavor"), validateRequest(flavorSchema), async (req, res, next) => {
+router.post("/flavors", requireAuth, requireAnyRole(...CATALOG_WRITE_ROLES), adminWriteLimiter, attachLojaId, auditCatalogChange("Flavor"), validateRequest(flavorSchema), async (req, res, next) => {
   try {
     const ip = req.ip || req.connection.remoteAddress;
 
-    const flavor = await prisma.flavor.create({ data: req.body });
+    const flavor = await prisma.flavor.create({ data: { ...req.body, lojaId: req.lojaId } });
 
     logSecurityEvent("CREATE_FLAVOR", { adminId: req.admin.id, flavorId: flavor.id }, ip);
 
@@ -157,7 +198,7 @@ router.post("/flavors", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GER
   }
 });
 
-router.put("/flavors/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("Flavor"), validateRequest(flavorSchema), async (req, res, next) => {
+router.put("/flavors/:id", requireAuth, requireAnyRole(...CATALOG_WRITE_ROLES), adminWriteLimiter, attachLojaId, auditCatalogChange("Flavor"), validateRequest(flavorSchema), async (req, res, next) => {
   try {
     const flavorId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;
@@ -165,6 +206,8 @@ router.put("/flavors/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "
     if (isNaN(flavorId)) {
       return res.status(400).json({ error: "ID inválido" });
     }
+
+    if (!(await ensureOwned("flavor", flavorId, req.lojaId, res))) return;
 
     const flavor = await prisma.flavor.update({
       where: { id: flavorId },
@@ -183,7 +226,7 @@ router.put("/flavors/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "
  * PATCH /api/catalog/flavors/:id
  * Edição parcial (preço extra/disponibilidade) — usada pela tela de Cardápio do operador.
  */
-router.patch("/flavors/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("Flavor"), validateRequest(flavorPatchSchema), async (req, res, next) => {
+router.patch("/flavors/:id", requireAuth, requireAnyRole(...CATALOG_WRITE_ROLES), adminWriteLimiter, attachLojaId, auditCatalogChange("Flavor"), validateRequest(flavorPatchSchema), async (req, res, next) => {
   try {
     const flavorId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;
@@ -191,6 +234,8 @@ router.patch("/flavors/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN",
     if (isNaN(flavorId)) {
       return res.status(400).json({ error: "ID inválido" });
     }
+
+    if (!(await ensureOwned("flavor", flavorId, req.lojaId, res))) return;
 
     const flavor = await prisma.flavor.update({
       where: { id: flavorId },
@@ -205,7 +250,7 @@ router.patch("/flavors/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN",
   }
 });
 
-router.delete("/flavors/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("Flavor"), async (req, res, next) => {
+router.delete("/flavors/:id", requireAuth, requireAnyRole(...CATALOG_WRITE_ROLES), adminWriteLimiter, attachLojaId, auditCatalogChange("Flavor"), async (req, res, next) => {
   try {
     const flavorId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;
@@ -213,6 +258,8 @@ router.delete("/flavors/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"
     if (isNaN(flavorId)) {
       return res.status(400).json({ error: "ID inválido" });
     }
+
+    if (!(await ensureOwned("flavor", flavorId, req.lojaId, res))) return;
 
     await prisma.flavor.delete({ where: { id: flavorId } });
 
@@ -225,20 +272,20 @@ router.delete("/flavors/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"
 });
 
 // ---------- Borders ----------
-router.get("/borders", adminReadLimiter, async (req, res, next) => {
+router.get("/borders", requireAuth, requireAnyRole(...CATALOG_READ_ROLES), adminReadLimiter, attachLojaId, async (req, res, next) => {
   try {
-    const borders = await prisma.border.findMany({ orderBy: { order: "asc" } });
+    const borders = await prisma.border.findMany({ where: { lojaId: req.lojaId }, orderBy: { order: "asc" } });
     res.json(borders);
   } catch (err) {
     next(err);
   }
 });
 
-router.post("/borders", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("Border"), validateRequest(borderSchema), async (req, res, next) => {
+router.post("/borders", requireAuth, requireAnyRole(...CATALOG_WRITE_ROLES), adminWriteLimiter, attachLojaId, auditCatalogChange("Border"), validateRequest(borderSchema), async (req, res, next) => {
   try {
     const ip = req.ip || req.connection.remoteAddress;
 
-    const border = await prisma.border.create({ data: req.body });
+    const border = await prisma.border.create({ data: { ...req.body, lojaId: req.lojaId } });
 
     logSecurityEvent("CREATE_BORDER", { adminId: req.admin.id, borderId: border.id }, ip);
 
@@ -248,7 +295,7 @@ router.post("/borders", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GER
   }
 });
 
-router.put("/borders/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("Border"), validateRequest(borderSchema), async (req, res, next) => {
+router.put("/borders/:id", requireAuth, requireAnyRole(...CATALOG_WRITE_ROLES), adminWriteLimiter, attachLojaId, auditCatalogChange("Border"), validateRequest(borderSchema), async (req, res, next) => {
   try {
     const borderId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;
@@ -256,6 +303,8 @@ router.put("/borders/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "
     if (isNaN(borderId)) {
       return res.status(400).json({ error: "ID inválido" });
     }
+
+    if (!(await ensureOwned("border", borderId, req.lojaId, res))) return;
 
     const border = await prisma.border.update({
       where: { id: borderId },
@@ -274,7 +323,7 @@ router.put("/borders/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "
  * PATCH /api/catalog/borders/:id
  * Edição parcial (preço/disponibilidade) — usada pela tela de Cardápio do operador.
  */
-router.patch("/borders/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("Border"), validateRequest(borderPatchSchema), async (req, res, next) => {
+router.patch("/borders/:id", requireAuth, requireAnyRole(...CATALOG_WRITE_ROLES), adminWriteLimiter, attachLojaId, auditCatalogChange("Border"), validateRequest(borderPatchSchema), async (req, res, next) => {
   try {
     const borderId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;
@@ -282,6 +331,8 @@ router.patch("/borders/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN",
     if (isNaN(borderId)) {
       return res.status(400).json({ error: "ID inválido" });
     }
+
+    if (!(await ensureOwned("border", borderId, req.lojaId, res))) return;
 
     const border = await prisma.border.update({
       where: { id: borderId },
@@ -296,7 +347,7 @@ router.patch("/borders/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN",
   }
 });
 
-router.delete("/borders/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("Border"), async (req, res, next) => {
+router.delete("/borders/:id", requireAuth, requireAnyRole(...CATALOG_WRITE_ROLES), adminWriteLimiter, attachLojaId, auditCatalogChange("Border"), async (req, res, next) => {
   try {
     const borderId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;
@@ -304,6 +355,8 @@ router.delete("/borders/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"
     if (isNaN(borderId)) {
       return res.status(400).json({ error: "ID inválido" });
     }
+
+    if (!(await ensureOwned("border", borderId, req.lojaId, res))) return;
 
     await prisma.border.delete({ where: { id: borderId } });
 
@@ -316,11 +369,11 @@ router.delete("/borders/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"
 });
 
 // ---------- Products ----------
-router.get("/products", adminReadLimiter, async (req, res, next) => {
+router.get("/products", requireAuth, requireAnyRole(...CATALOG_READ_ROLES), adminReadLimiter, attachLojaId, async (req, res, next) => {
   try {
     const { category } = req.query;
     const products = await prisma.product.findMany({
-      where: category ? { category: String(category).toUpperCase() } : undefined,
+      where: { lojaId: req.lojaId, ...(category ? { category: String(category).toUpperCase() } : {}) },
       orderBy: { order: "asc" },
     });
     res.json(products);
@@ -329,11 +382,11 @@ router.get("/products", adminReadLimiter, async (req, res, next) => {
   }
 });
 
-router.post("/products", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("Product"), validateRequest(productSchema), async (req, res, next) => {
+router.post("/products", requireAuth, requireAnyRole(...CATALOG_WRITE_ROLES), adminWriteLimiter, attachLojaId, auditCatalogChange("Product"), validateRequest(productSchema), async (req, res, next) => {
   try {
     const ip = req.ip || req.connection.remoteAddress;
 
-    const product = await prisma.product.create({ data: req.body });
+    const product = await prisma.product.create({ data: { ...req.body, lojaId: req.lojaId } });
 
     logSecurityEvent("CREATE_PRODUCT", { adminId: req.admin.id, productId: product.id }, ip);
 
@@ -343,7 +396,7 @@ router.post("/products", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GE
   }
 });
 
-router.put("/products/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("Product"), validateRequest(productSchema), async (req, res, next) => {
+router.put("/products/:id", requireAuth, requireAnyRole(...CATALOG_WRITE_ROLES), adminWriteLimiter, attachLojaId, auditCatalogChange("Product"), validateRequest(productSchema), async (req, res, next) => {
   try {
     const productId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;
@@ -351,6 +404,8 @@ router.put("/products/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", 
     if (isNaN(productId)) {
       return res.status(400).json({ error: "ID inválido" });
     }
+
+    if (!(await ensureOwned("product", productId, req.lojaId, res))) return;
 
     const product = await prisma.product.update({
       where: { id: productId },
@@ -369,7 +424,7 @@ router.put("/products/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", 
  * PATCH /api/catalog/products/:id
  * Edição parcial (preço/disponibilidade) — usada pela tela de Cardápio do operador.
  */
-router.patch("/products/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("Product"), validateRequest(productPatchSchema), async (req, res, next) => {
+router.patch("/products/:id", requireAuth, requireAnyRole(...CATALOG_WRITE_ROLES), adminWriteLimiter, attachLojaId, auditCatalogChange("Product"), validateRequest(productPatchSchema), async (req, res, next) => {
   try {
     const productId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;
@@ -377,6 +432,8 @@ router.patch("/products/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"
     if (isNaN(productId)) {
       return res.status(400).json({ error: "ID inválido" });
     }
+
+    if (!(await ensureOwned("product", productId, req.lojaId, res))) return;
 
     const product = await prisma.product.update({
       where: { id: productId },
@@ -391,7 +448,7 @@ router.patch("/products/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN"
   }
 });
 
-router.delete("/products/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN", "GERENTE"), adminWriteLimiter, auditCatalogChange("Product"), async (req, res, next) => {
+router.delete("/products/:id", requireAuth, requireAnyRole(...CATALOG_WRITE_ROLES), adminWriteLimiter, attachLojaId, auditCatalogChange("Product"), async (req, res, next) => {
   try {
     const productId = parseInt(req.params.id);
     const ip = req.ip || req.connection.remoteAddress;
@@ -399,6 +456,8 @@ router.delete("/products/:id", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN
     if (isNaN(productId)) {
       return res.status(400).json({ error: "ID inválido" });
     }
+
+    if (!(await ensureOwned("product", productId, req.lojaId, res))) return;
 
     await prisma.product.delete({ where: { id: productId } });
 

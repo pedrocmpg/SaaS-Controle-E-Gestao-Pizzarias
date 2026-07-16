@@ -71,9 +71,15 @@ function initSocket(server) {
   io.use(authenticateSocket);
 
   io.on("connection", async (socket) => {
-    // Entra nas rooms das lojas às quais o admin tem acesso.
-    // Hoje Admin não tem lojaId — entra em todas as lojas existentes (1 em produção).
-    // Futuro: socket.join(`loja:${socket.data.admin.lojaId}`).
+    // Entra apenas na room da loja do admin (isolamento multi-tenant).
+    // Operador vinculado → sua loja. SUPER_ADMIN global (lojaId null) → todas as lojas.
+    const admin = socket.data.admin || {};
+    if (admin.lojaId != null) {
+      socket.join(`loja:${admin.lojaId}`);
+      return;
+    }
+
+    // SUPER_ADMIN sem loja: acompanha todas as lojas existentes.
     try {
       const lojas = await prisma.loja.findMany({ select: { id: true } });
       lojas.forEach((l) => socket.join(`loja:${l.id}`));

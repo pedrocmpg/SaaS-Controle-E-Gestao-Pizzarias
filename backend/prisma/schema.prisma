@@ -35,11 +35,62 @@ enum OrderStatus {
   CANCELADO
 }
 
+/// Origem do pedido. Fase 1 = só TELEFONE; demais reservados para a fase 2 (integrações).
+enum OrigemPedido {
+  TELEFONE
+  IFOOD
+  ANOTA_AI
+  WHATSAPP
+  BALCAO
+}
+
+enum StatusMesa {
+  LIVRE
+  OCUPADA
+}
+
+enum StatusComanda {
+  ABERTA
+  FECHADA
+  CANCELADA
+}
+
+/// Faixas de cobrança do rodízio (preço fixo por pessoa, com variação por faixa)
+enum FaixaRodizio {
+  ADULTO
+  CRIANCA
+  MEIA
+}
+
+enum ComandaItemTipo {
+  RODIZIO
+  PRODUTO
+}
+
+/// Caixa do salão e da tele-entrega são fundos separados (não se misturam)
+enum TipoCaixa {
+  SALAO
+  TELE_ENTREGA
+}
+
+enum StatusCaixa {
+  ABERTO
+  FECHADO_AGUARDANDO_CONFERENCIA
+  CONFERIDO
+}
+
+enum TipoMovimentoCaixa {
+  SANGRIA
+  SUPRIMENTO
+}
+
 /// Tamanhos de pizza "Monte a sua" (Pequena, Média, Grande)
 model PizzaSize {
   id           Int      @id @default(autoincrement())
+  lojaId       Int
+  loja         Loja     @relation(fields: [lojaId], references: [id])
   name         String
-  slug         String   @unique
+  slug         String
   slices       Int
   maxFlavors   Int
   servesPeople Int
@@ -51,40 +102,50 @@ model PizzaSize {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  @@unique([lojaId, slug])
+  @@index([lojaId])
   @@map("pizza_sizes")
 }
 
 /// Sabores disponíveis (salgados e doces)
 model Flavor {
   id          Int        @id @default(autoincrement())
+  lojaId      Int
+  loja        Loja       @relation(fields: [lojaId], references: [id])
   name        String
   description String?
   type        FlavorType
-  extraPrice  Decimal    @db.Decimal(10, 2) @default(0)
+  extraPrice  Decimal    @default(0) @db.Decimal(10, 2)
   imageUrl    String?
   active      Boolean    @default(true)
   order       Int        @default(0)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
+  @@index([lojaId])
   @@map("flavors")
 }
 
 /// Bordas recheadas
 model Border {
   id     Int        @id @default(autoincrement())
+  lojaId Int
+  loja   Loja       @relation(fields: [lojaId], references: [id])
   name   String
   price  Decimal    @db.Decimal(10, 2)
   type   FlavorType
   active Boolean    @default(true)
   order  Int        @default(0)
 
+  @@index([lojaId])
   @@map("borders")
 }
 
 /// Produtos fixos: combos, pizza vulcão, bebidas etc (não configuráveis)
 model Product {
   id           Int             @id @default(autoincrement())
+  lojaId       Int
+  loja         Loja            @relation(fields: [lojaId], references: [id])
   name         String
   description  String?
   price        Decimal         @db.Decimal(10, 2)
@@ -95,44 +156,217 @@ model Product {
   order        Int             @default(0)
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
+  comandaItens ComandaItem[]
 
+  @@index([lojaId])
   @@map("products")
 }
 
 /// Pedido feito por um cliente
 model Order {
-  id            Int           @id @default(autoincrement())
+  id            Int          @id @default(autoincrement())
   lojaId        Int
-  loja          Loja          @relation(fields: [lojaId], references: [id])
+  loja          Loja         @relation(fields: [lojaId], references: [id])
   customerName  String
-  phone         String        // Criptografado no banco (de/encrypt no app)
-  address       String?       // Criptografado no banco
-  deliveryType  DeliveryType  @default(ENTREGA)
+  phone         String // Criptografado no banco (de/encrypt no app)
+  address       String? // Criptografado no banco
+  deliveryType  DeliveryType @default(ENTREGA)
   paymentMethod String
   notes         String?
-  status        OrderStatus   @default(RECEBIDO)
-  deliveryFee   Decimal       @db.Decimal(10, 2) @default(0)
-  totalPrice    Decimal       @db.Decimal(10, 2)
+  status        OrderStatus  @default(RECEBIDO)
+  origem        OrigemPedido @default(TELEFONE)
+  deliveryFee   Decimal      @default(0) @db.Decimal(10, 2)
+  totalPrice    Decimal      @db.Decimal(10, 2)
+  // Atendente que registrou o pedido (fluxo interno). Nullable p/ pedidos legados/integrações.
+  atendenteId   Int?
+  atendente     Admin?       @relation(fields: [atendenteId], references: [id])
+  // Cliente vinculado (histórico por telefone, isolado por loja).
+  clienteId     Int?
+  cliente       Cliente?     @relation(fields: [clienteId], references: [id])
   items         OrderItem[]
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
   @@index([lojaId, status])
+  @@index([atendenteId])
+  @@index([clienteId])
   @@map("orders")
+}
+
+/// Cliente cadastrado por loja (histórico de tele-entrega).
+/// Isolado por lojaId: o mesmo telefone em lojas diferentes = clientes diferentes.
+/// phoneHash é determinístico (HMAC) só para permitir busca; endereço fica criptografado.
+model Cliente {
+  id        Int      @id @default(autoincrement())
+  lojaId    Int
+  loja      Loja     @relation(fields: [lojaId], references: [id])
+  phoneHash String // HMAC-SHA256 do telefone normalizado (determinístico, pesquisável)
+  name      String
+  address   String? // Criptografado no banco (mesmo tratamento de Order.address)
+  pedidos   Order[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([lojaId, phoneHash])
+  @@index([lojaId])
+  @@map("clientes")
+}
+
+/// Mesa numerada do salão (sem mapa visual, só número + status)
+model Mesa {
+  id        Int        @id @default(autoincrement())
+  lojaId    Int
+  loja      Loja       @relation(fields: [lojaId], references: [id])
+  numero    Int
+  status    StatusMesa @default(LIVRE)
+  comandas  Comanda[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@unique([lojaId, numero])
+  @@index([lojaId])
+  @@map("mesas")
+}
+
+/// Preço do rodízio por faixa (adulto/criança/meia), configurável por loja
+model RodizioPreco {
+  id        Int          @id @default(autoincrement())
+  lojaId    Int
+  loja      Loja         @relation(fields: [lojaId], references: [id])
+  faixa     FaixaRodizio
+  preco     Decimal      @db.Decimal(10, 2)
+  active    Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([lojaId, faixa])
+  @@index([lojaId])
+  @@map("rodizio_precos")
+}
+
+/// Comanda de mesa do salão (rodízio + bebidas). Fluxo separado da tele-entrega.
+model Comanda {
+  id     Int           @id @default(autoincrement())
+  lojaId Int
+  loja   Loja          @relation(fields: [lojaId], references: [id])
+  mesaId Int
+  mesa   Mesa          @relation(fields: [mesaId], references: [id])
+  status StatusComanda @default(ABERTA)
+
+  abertaEm  DateTime  @default(now())
+  fechadaEm DateTime?
+
+  // Uma só forma de pagamento por comanda (mesma regra do módulo Pedidos)
+  paymentMethod String?
+  totalPrice    Decimal @default(0) @db.Decimal(10, 2)
+
+  atendenteAberturaId   Int?
+  atendenteAbertura     Admin? @relation("ComandaAbertura", fields: [atendenteAberturaId], references: [id])
+  atendenteFechamentoId Int?
+  atendenteFechamento   Admin? @relation("ComandaFechamento", fields: [atendenteFechamentoId], references: [id])
+
+  // Preenchido no fechamento, vincula a comanda à sessão de caixa do salão
+  caixaSessaoId Int?
+  caixaSessao   CaixaSessao? @relation(fields: [caixaSessaoId], references: [id])
+
+  itens ComandaItem[]
+
+  @@index([lojaId])
+  @@index([mesaId])
+  @@index([caixaSessaoId])
+  @@map("comandas")
+}
+
+/// Item de uma comanda de salão: rodízio (por faixa) ou produto (bebida/combo)
+model ComandaItem {
+  id        Int             @id @default(autoincrement())
+  comandaId Int
+  comanda   Comanda         @relation(fields: [comandaId], references: [id], onDelete: Cascade)
+  tipo      ComandaItemTipo
+
+  // Só quando tipo = RODIZIO
+  faixaRodizio FaixaRodizio?
+
+  // Só quando tipo = PRODUTO
+  productId Int?
+  product   Product? @relation(fields: [productId], references: [id])
+
+  descricao String // snapshot do nome/faixa no momento da venda
+  quantity  Int      @default(1)
+  unitPrice Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+
+  @@index([comandaId])
+  @@map("comanda_items")
+}
+
+/// Sessão de caixa por turno (salão e tele-entrega são fundos separados)
+model CaixaSessao {
+  id     Int         @id @default(autoincrement())
+  lojaId Int
+  loja   Loja        @relation(fields: [lojaId], references: [id])
+  tipo   TipoCaixa
+  status StatusCaixa @default(ABERTO)
+
+  fundoTroco   Decimal   @db.Decimal(10, 2)
+  abertoPorId  Int
+  abertoPor    Admin     @relation("CaixaAbertura", fields: [abertoPorId], references: [id])
+  abertoEm     DateTime  @default(now())
+  fechadoPorId Int?
+  fechadoPor   Admin?    @relation("CaixaFechamento", fields: [fechadoPorId], references: [id])
+  fechadoEm    DateTime?
+
+  // Breakdown por forma de pagamento (calculado no fechamento a partir das comandas vinculadas).
+  // Só dinheiro entra na gaveta; cartão/PIX nunca contam pro saldo em espécie.
+  totalVendasDinheiro Decimal? @db.Decimal(10, 2)
+  totalVendasCartao   Decimal? @db.Decimal(10, 2)
+  totalVendasPix      Decimal? @db.Decimal(10, 2)
+  totalSangrias       Decimal? @db.Decimal(10, 2)
+  totalSuprimentos    Decimal? @db.Decimal(10, 2)
+
+  // = fundoTroco + totalVendasDinheiro - totalSangrias + totalSuprimentos
+  saldoFinalCalculado Decimal? @db.Decimal(10, 2)
+
+  conferidoPorId    Int?
+  conferidoPor      Admin?    @relation("CaixaConferencia", fields: [conferidoPorId], references: [id])
+  conferidoEm       DateTime?
+  saldoFinalContado Decimal?  @db.Decimal(10, 2)
+
+  comandas   Comanda[]
+  movimentos MovimentoCaixa[]
+
+  @@index([lojaId])
+  @@map("caixa_sessoes")
+}
+
+/// Sangria/suprimento do caixa. Motivo é obrigatório (auditoria).
+model MovimentoCaixa {
+  id            Int                @id @default(autoincrement())
+  caixaSessaoId Int
+  caixaSessao   CaixaSessao        @relation(fields: [caixaSessaoId], references: [id])
+  tipo          TipoMovimentoCaixa
+  valor         Decimal            @db.Decimal(10, 2)
+  motivo        String
+  adminId       Int
+  admin         Admin              @relation(fields: [adminId], references: [id])
+  createdAt     DateTime           @default(now())
+
+  @@index([caixaSessaoId])
+  @@map("movimentos_caixa")
 }
 
 /// Item de um pedido (snapshot dos dados no momento da compra)
 model OrderItem {
-  id           Int      @id @default(autoincrement())
+  id           Int     @id @default(autoincrement())
   orderId      Int
-  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   itemName     String
   itemType     String // MONTAVEL | COMBO | BEBIDA | ESPECIAL
   flavors      Json? // array de nomes dos sabores escolhidos
   borderName   String?
-  quantity     Int      @default(1)
-  unitPrice    Decimal  @db.Decimal(10, 2)
-  subtotal     Decimal  @db.Decimal(10, 2)
+  quantity     Int     @default(1)
+  unitPrice    Decimal @db.Decimal(10, 2)
+  subtotal     Decimal @db.Decimal(10, 2)
   observations String?
 
   @@map("order_items")
@@ -140,47 +374,61 @@ model OrderItem {
 
 /// Usuário administrador (painel de gestão)
 model Admin {
-  id                 Int         @id @default(autoincrement())
-  name               String
-  email              String      @unique
-  passwordHash       String
-  role               String      @default("ADMIN") // SUPER_ADMIN, ADMIN, VIEWER
-  
-  // 2FA - TOTP
-  totpSecret         String?     // Secret para geração de TOTP (Google Authenticator)
-  totpEnabled        Boolean     @default(false)
-  backupCodes        String?     // JSON array de backup codes (criptografado)
-  
-  // Auditoria
-  lastLoginAt        DateTime?
-  lastLoginIp        String?
-  auditLogs          AuditLog[]  // Relação com logs de auditoria
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  id           Int    @id @default(autoincrement())
+  // Loja à qual o operador pertence. Nullable: SUPER_ADMIN pode ser global (sem loja).
+  lojaId       Int?
+  loja         Loja?  @relation(fields: [lojaId], references: [id])
+  name         String
+  email        String @unique
+  passwordHash String
+  role         String @default("ADMIN") // SUPER_ADMIN, ADMIN, VIEWER
 
+  // 2FA - TOTP
+  totpSecret  String? // Secret para geração de TOTP (Google Authenticator)
+  totpEnabled Boolean @default(false)
+  backupCodes String? // JSON array de backup codes (criptografado)
+
+  // Auditoria
+  lastLoginAt DateTime?
+  lastLoginIp String?
+  auditLogs   AuditLog[] // Relação com logs de auditoria
+  pedidos     Order[] // Pedidos registrados por este atendente
+
+  // Módulo PDV Salão/Caixa
+  comandasAbertas  Comanda[]        @relation("ComandaAbertura")
+  comandasFechadas Comanda[]        @relation("ComandaFechamento")
+  caixasAbertos    CaixaSessao[]    @relation("CaixaAbertura")
+  caixasFechados   CaixaSessao[]    @relation("CaixaFechamento")
+  caixasConferidos CaixaSessao[]    @relation("CaixaConferencia")
+  movimentosCaixa  MovimentoCaixa[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([lojaId])
   @@map("admins")
 }
 
 /// Log de auditoria - rastreia todas as mudanças no catálogo
 /// Permite investigar: quem mudou, o quê, quando, de qual IP
 model AuditLog {
-  id              Int      @id @default(autoincrement())
-  table           String   // "PizzaSize", "Flavor", "Border", "Product"
-  recordId        Int      // ID do registro modificado
-  action          String   // "CREATE", "UPDATE", "DELETE"
-  adminId         Int      // ID do admin que fez a mudança
-  admin           Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
-  
+  id       Int    @id @default(autoincrement())
+  table    String // "PizzaSize", "Flavor", "Border", "Product"
+  recordId Int // ID do registro modificado
+  action   String // "CREATE", "UPDATE", "DELETE"
+  adminId  Int // ID do admin que fez a mudança
+  admin    Admin  @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
   // Snapshots antes/depois (JSON para rastreabilidade completa)
-  before          Json?    // Estado anterior (null se CREATE)
-  after           Json?    // Estado novo (null se DELETE)
-  
+  before Json? // Estado anterior (null se CREATE)
+  after  Json? // Estado novo (null se DELETE)
+
   // Contexto da mudança
-  ip              String   // IP do cliente
-  userAgent       String?  // Browser/client info
-  timestamp       DateTime @default(now())
-  
-  createdAt       DateTime @default(now())
+  ip        String // IP do cliente
+  userAgent String? // Browser/client info
+  timestamp DateTime @default(now())
+
+  createdAt DateTime @default(now())
 
   @@index([table, recordId])
   @@index([adminId, timestamp])
@@ -191,11 +439,11 @@ model AuditLog {
 /// Loja (unidade da rede). Dona da configuração e alvo dos pedidos.
 /// Por ora existe 1 registro em produção; a estrutura já suporta múltiplas lojas.
 model Loja {
-  id              Int      @id @default(autoincrement())
+  id              Int            @id @default(autoincrement())
   nome            String
-  whatsapp        String   // Criptografado no banco
-  phone           String   // Criptografado no banco
-  address         String   // Criptografado no banco
+  whatsapp        String // Criptografado no banco
+  phone           String // Criptografado no banco
+  address         String // Criptografado no banco
   city            String
   state           String
   zipCode         String
@@ -203,14 +451,24 @@ model Loja {
   instagramUrl    String?
   facebookUrl     String?
   openingHours    Json
-  minDeliveryFee  Decimal  @db.Decimal(10, 2) @default(10)
-  maxDeliveryFee  Decimal  @db.Decimal(10, 2) @default(20)
-  minDeliveryTime Int      @default(40)
-  maxDeliveryTime Int      @default(70)
-  isOpen          Boolean  @default(true)
+  minDeliveryFee  Decimal        @default(10) @db.Decimal(10, 2)
+  maxDeliveryFee  Decimal        @default(20) @db.Decimal(10, 2)
+  minDeliveryTime Int            @default(40)
+  maxDeliveryTime Int            @default(70)
+  isOpen          Boolean        @default(true)
   pedidos         Order[]
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  admins          Admin[]
+  clientes        Cliente[]
+  pizzaSizes      PizzaSize[]
+  flavors         Flavor[]
+  borders         Border[]
+  products        Product[]
+  mesas           Mesa[]
+  rodizioPrecos   RodizioPreco[]
+  comandas        Comanda[]
+  caixaSessoes    CaixaSessao[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   @@map("lojas")
 }

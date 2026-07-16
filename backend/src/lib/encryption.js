@@ -65,7 +65,39 @@ function decrypt(encryptedData) {
   }
 }
 
+/**
+ * Normaliza um número de telefone para busca/hash.
+ * Remove prefixo SIP, espaços, traços, parênteses e o DDI 55 do Brasil.
+ * Mantém apenas dígitos (DDD + número). Ex.: "sip:+55 (54) 99999-1234" -> "54999991234".
+ * @param {string} phone
+ * @returns {string} apenas dígitos, sem DDI 55
+ */
+function normalizePhone(phone) {
+  if (!phone) return "";
+  let digits = String(phone).replace(/\D/g, ""); // só dígitos
+  // Remove DDI 55 quando o número tem tamanho de telefone nacional + DDI (12 ou 13 dígitos)
+  if (digits.length > 11 && digits.startsWith("55")) {
+    digits = digits.slice(2);
+  }
+  return digits;
+}
+
+/**
+ * Hash determinístico do telefone (HMAC-SHA256), pesquisável no banco.
+ * Diferente de encrypt(): sem IV, mesma entrada => mesma saída, permitindo busca de cliente.
+ * @param {string} phone - telefone (será normalizado antes)
+ * @returns {string} hash hex, ou "" se telefone vazio
+ */
+function hashPhone(phone) {
+  const normalized = normalizePhone(phone);
+  if (!normalized) return "";
+  const secret = process.env.PHONE_HASH_SECRET || process.env.JWT_SECRET || "fallback-secret-key";
+  return crypto.createHmac("sha256", secret).update(normalized).digest("hex");
+}
+
 module.exports = {
   encrypt,
   decrypt,
+  normalizePhone,
+  hashPhone,
 };

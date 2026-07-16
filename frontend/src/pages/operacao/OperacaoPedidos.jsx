@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { ordersService } from "../../services/api";
 import { getNextStatus } from "../../services/orderStatus";
+import { connectSocket } from "../../services/socket";
+import { useAdminAuth } from "../../context/AdminAuthContext";
+import NovoPedidoModal from "./NovoPedidoModal";
 
 const TABS = [
   { key: "TODOS", label: "Todos" },
@@ -35,10 +38,15 @@ const ACTION_LABEL = {
 };
 
 export default function OperacaoPedidos() {
+  const { admin } = useAdminAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("TODOS");
+  const [showNovoPedido, setShowNovoPedido] = useState(false);
+
+  // Gerente não edita/cancela pedido (não acompanha a operação). Demais papéis podem.
+  const canCancel = admin?.role !== "GERENTE";
 
   const loadOrders = useCallback(() => {
     setLoading(true);
@@ -53,18 +61,48 @@ export default function OperacaoPedidos() {
     loadOrders();
   }, [loadOrders]);
 
+  // Tempo real: novos pedidos e mudanças de status aparecem sozinhos (dedupe por id).
+  useEffect(() => {
+    const socket = connectSocket();
+
+    const upsert = (order) =>
+      setOrders((prev) => {
+        const exists = prev.some((o) => o.id === order.id);
+        if (exists) return prev.map((o) => (o.id === order.id ? { ...o, ...order } : o));
+        return [order, ...prev];
+      });
+
+    socket.on("pedido:novo", upsert);
+    socket.on("pedido:status_atualizado", upsert);
+
+    return () => {
+      socket.off("pedido:novo", upsert);
+      socket.off("pedido:status_atualizado", upsert);
+    };
+  }, []);
+
   async function advanceStatus(order) {
     const next = getNextStatus(order.status);
     if (!next) return;
+    await changeStatus(order, next);
+  }
 
+  async function changeStatus(order, next) {
     const previous = orders;
     setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: next } : o)));
     try {
       const updated = await ordersService.updateStatus(order.id, next);
       setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, ...updated } : o)));
     } catch (err) {
+      // Conflito de concorrência (409) ou outro erro: reverte e recarrega o pedido do servidor.
       setOrders(previous);
       setError(err.response?.data?.error || "Não foi possível atualizar o status.");
+      if (err.response?.status === 409) {
+        ordersService
+          .getById(order.id)
+          .then((fresh) => setOrders((prev) => prev.map((o) => (o.id === fresh.id ? { ...o, ...fresh } : o))))
+          .catch(() => {});
+      }
     }
   }
 
@@ -79,9 +117,14 @@ export default function OperacaoPedidos() {
     <div>
       <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
         <h1 className="text-2xl font-display font-semibold text-char">Pedidos</h1>
-        <button onClick={loadOrders} className="btn-secondary text-sm">
-          Atualizar
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={loadOrders} className="btn-secondary text-sm">
+            Atualizar
+          </button>
+          <button onClick={() => setShowNovoPedido(true)} className="btn-primary text-sm">
+            Novo pedido
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -146,14 +189,24 @@ export default function OperacaoPedidos() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      {!isTerminal && actionLabel && (
-                        <button
-                          onClick={() => advanceStatus(order)}
-                          className="btn-primary text-xs px-3 py-1.5"
-                        >
-                          {actionLabel}
-                        </button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {!isTerminal && actionLabel && (
+                          <button
+                            onClick={() => advanceStatus(order)}
+                            className="btn-primary text-xs px-3 py-1.5"
+                          >
+                            {actionLabel}
+                          </button>
+                        )}
+                        {!isTerminal && canCancel && (
+                          <button
+                            onClick={() => changeStatus(order, "CANCELADO")}
+                            className="text-xs px-3 py-1.5 rounded-full border border-flour-2 text-ink-soft hover:text-red-600 hover:border-red-200"
+                          >
+                            Cancelar
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -161,6 +214,15 @@ export default function OperacaoPedidos() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {showNovoPedido && (
+        <NovoPedidoModal
+          onClose={() => setShowNovoPedido(false)}
+          onCreated={(order) =>
+            setOrders((prev) => (prev.some((o) => o.id === order.id) ? prev : [order, ...prev]))
+          }
+        />
       )}
     </div>
   );

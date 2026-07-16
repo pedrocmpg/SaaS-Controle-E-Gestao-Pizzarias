@@ -7,7 +7,7 @@ import { PizzaPreview } from "./PizzaPreview";
  * Modal "Monte sua Pizza": UX redesignado com preview visual, feedback melhorado
  * Otimizado para mobile com touch targets de 44x44px.
  */
-export default function PizzaBuilderModal({ size, flavors, borders, onClose }) {
+export default function PizzaBuilderModal({ size, flavors, borders, onClose, onAdd }) {
   const { addItem } = useCart();
   const toast = useToast();
   const [flavorType, setFlavorType] = useState("SALGADA");
@@ -45,7 +45,7 @@ export default function PizzaBuilderModal({ size, flavors, borders, onClose }) {
       return;
     }
 
-    addItem({
+    const item = {
       itemName: `Pizza ${size.name} (${selectedFlavors.length} sabor${selectedFlavors.length > 1 ? "es" : ""})`,
       itemType: "MONTAVEL",
       flavors: selectedFlavors.map((f) => f.name),
@@ -53,8 +53,15 @@ export default function PizzaBuilderModal({ size, flavors, borders, onClose }) {
       quantity,
       unitPrice,
       observations,
-    });
-    toast.success("Pizza adicionada ao carrinho!");
+    };
+
+    // Fluxo do atendente passa onAdd (lista local do pedido); vitrine pública usa o carrinho.
+    if (onAdd) {
+      onAdd(item);
+    } else {
+      addItem(item);
+      toast.success("Pizza adicionada ao carrinho!");
+    }
     onClose();
   }
 
