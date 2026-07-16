@@ -112,6 +112,7 @@ const createOrderSchema = Joi.object({
 
 /**
  * Schema para atualizar status de pedido
+ * motoboyId é exigido só na transição para SAIU_PARA_ENTREGA (despacho do módulo Motoboy).
  */
 const updateOrderStatusSchema = Joi.object({
   status: Joi.string()
@@ -120,6 +121,13 @@ const updateOrderStatusSchema = Joi.object({
     .messages({
       "any.only": "Status inválido",
       "any.required": "Status é obrigatório",
+    }),
+  motoboyId: Joi.number()
+    .integer()
+    .positive()
+    .when("status", { is: "SAIU_PARA_ENTREGA", then: Joi.required(), otherwise: Joi.forbidden() })
+    .messages({
+      "any.required": "Motoboy é obrigatório ao despachar o pedido",
     }),
 });
 
@@ -154,6 +162,15 @@ const updateSettingsSchema = Joi.object({
   closingTime: Joi.string()
     .pattern(/^\d{2}:\d{2}$/)
     .allow(null, ""),
+  // Módulo Motoboy: valores configuráveis por loja.
+  valorPorEntregaMotoboy: Joi.number()
+    .min(0)
+    .max(999.99)
+    .allow(null),
+  valorAluguelMotoNoite: Joi.number()
+    .min(0)
+    .max(999.99)
+    .allow(null),
 });
 
 /**
@@ -355,6 +372,80 @@ const conferirCaixaSchema = Joi.object({
     }),
 });
 
+/**
+ * Schema para abrir um turno de motoboy
+ */
+const abrirTurnoMotoboySchema = Joi.object({
+  motoboyId: Joi.number()
+    .integer()
+    .positive()
+    .required()
+    .messages({
+      "any.required": "Motoboy é obrigatório",
+    }),
+  fundoTroco: Joi.number()
+    .min(0)
+    .max(99999.99)
+    .required()
+    .messages({
+      "any.required": "Fundo de troco é obrigatório",
+    }),
+});
+
+/**
+ * Schema para lançar um extra no turno do motoboy — motivo é obrigatório (auditoria)
+ */
+const extraMotoboySchema = Joi.object({
+  tipo: Joi.string()
+    .valid("ENTREGA_LONGA", "GORJETA", "AJUDA_CUSTO", "OUTRO")
+    .required()
+    .messages({
+      "any.only": "Tipo de extra inválido",
+      "any.required": "Tipo de extra é obrigatório",
+    }),
+  valor: Joi.number()
+    .positive()
+    .max(99999.99)
+    .required()
+    .messages({
+      "any.required": "Valor é obrigatório",
+    }),
+  motivo: Joi.string()
+    .min(1)
+    .max(255)
+    .trim()
+    .required()
+    .messages({
+      "string.empty": "Motivo é obrigatório",
+      "any.required": "Motivo é obrigatório",
+    }),
+});
+
+/**
+ * Schema para fechar o turno de motoboy — cartão/PIX digitados manualmente (fase 1)
+ */
+const fecharTurnoMotoboySchema = Joi.object({
+  totalRecebidoCartao: Joi.number()
+    .min(0)
+    .max(99999.99)
+    .required()
+    .messages({
+      "any.required": "Total recebido em cartão é obrigatório",
+    }),
+  totalRecebidoPix: Joi.number()
+    .min(0)
+    .max(99999.99)
+    .required()
+    .messages({
+      "any.required": "Total recebido em PIX é obrigatório",
+    }),
+});
+
+/**
+ * Schema para conferência do turno de motoboy (mesmo espírito da conferência do Caixa)
+ */
+const conferirTurnoMotoboySchema = Joi.object({}).unknown(false);
+
 module.exports = {
   loginSchema,
   createOrderSchema,
@@ -373,4 +464,8 @@ module.exports = {
   abrirCaixaSchema,
   movimentoCaixaSchema,
   conferirCaixaSchema,
+  abrirTurnoMotoboySchema,
+  extraMotoboySchema,
+  fecharTurnoMotoboySchema,
+  conferirTurnoMotoboySchema,
 };

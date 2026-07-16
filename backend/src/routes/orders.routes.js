@@ -9,7 +9,7 @@ const validateRequest = require("../middleware/validateRequest");
 const { createOrderSchema, updateOrderStatusSchema } = require("../validators/schemas");
 const { logSecurityEvent } = require("../lib/securityLogger");
 const { ALL_STATUSES, isValidTransition } = require("../lib/orderStatus");
-const { emitPedidoNovo, emitPedidoStatus } = require("../lib/socket");
+const { emitPedidoNovo, emitPedidoStatus, emitDespachoAtribuido, emitDespachoEntregue } = require("../lib/socket");
 const { logAuditChange } = require("../middleware/auditLogger");
 
 const router = express.Router();
@@ -303,7 +303,7 @@ router.get("/:id", requireAuth, requireAnyRole(...ORDER_ROLES), adminReadLimiter
 router.patch("/:id/status", requireAuth, requireAnyRole(...ORDER_ROLES), adminWriteLimiter, validateRequest(updateOrderStatusSchema), async (req, res, next) => {
   try {
     const orderId = parseInt(req.params.id);
-    const { status } = req.body;
+    const { status, motoboyId } = req.body;
     const ip = req.ip || req.connection.remoteAddress;
 
     if (isNaN(orderId)) {
@@ -335,9 +335,27 @@ router.patch("/:id/status", requireAuth, requireAnyRole(...ORDER_ROLES), adminWr
       });
     }
 
+    // Módulo Motoboy: despacho exige um turno ABERTO do motoboy escolhido nesta loja.
+    // Vincula a FK direta (turnoMotoboyId) para o fechamento do turno não depender de janela
+    // de tempo — evita que um pedido marcado ENTREGUE com atraso caia no turno errado.
+    const data = { status };
+    if (status === "SAIU_PARA_ENTREGA") {
+      const turno = await prisma.turnoMotoboy.findFirst({
+        where: { motoboyId, lojaId: current.lojaId, status: "ABERTO" },
+      });
+      if (!turno) {
+        return res.status(409).json({ error: "Motoboy não tem turno aberto nesta loja. Abra um turno antes de despachar." });
+      }
+      data.motoboyId = motoboyId;
+      data.turnoMotoboyId = turno.id;
+    }
+    if (status === "ENTREGUE") {
+      data.entregueEm = new Date();
+    }
+
     const order = await prisma.order.update({
       where: { id: orderId },
-      data: { status },
+      data,
       include: { items: true },
     });
 
@@ -360,6 +378,12 @@ router.patch("/:id/status", requireAuth, requireAnyRole(...ORDER_ROLES), adminWr
 
     // Notifica o painel em tempo real (room da loja)
     emitPedidoStatus(order.lojaId, order);
+    if (status === "SAIU_PARA_ENTREGA") {
+      emitDespachoAtribuido(order.lojaId, order);
+    }
+    if (status === "ENTREGUE") {
+      emitDespachoEntregue(order.lojaId, order);
+    }
 
     res.json(order);
   } catch (err) {

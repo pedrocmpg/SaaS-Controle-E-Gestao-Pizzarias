@@ -6,6 +6,8 @@ const OPERATION_LINKS = [
   { to: "/operacao/pedidos", label: "Pedidos", roles: ["SUPER_ADMIN", "ADMIN", "GERENTE", "ATENDENTE"] },
   { to: "/operacao/salao", label: "Salão", roles: ["SUPER_ADMIN", "ADMIN", "GERENTE", "ATENDENTE"] },
   { to: "/operacao/caixa", label: "Caixa", roles: ["SUPER_ADMIN", "ADMIN", "GERENTE", "ATENDENTE"] },
+  { to: "/operacao/despacho", label: "Despacho", roles: ["SUPER_ADMIN", "ADMIN", "GERENTE", "ATENDENTE"] },
+  { to: "/operacao/motoboy", label: "Motoboy", roles: ["SUPER_ADMIN", "ADMIN", "GERENTE", "ATENDENTE", "MOTOBOY"] },
   { to: "/operacao/cardapio", label: "Cardápio", roles: ["SUPER_ADMIN", "ADMIN", "GERENTE"] },
   { to: "/operacao/relatorio", label: "Relatório do dia", roles: ["SUPER_ADMIN", "ADMIN", "GERENTE"] },
 ];

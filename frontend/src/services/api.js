@@ -82,6 +82,19 @@ export const caixaService = {
   getHistorico: () => api.get("/caixa/historico").then((r) => r.data),
 };
 
+export const motoboyService = {
+  getLista: () => api.get("/motoboy/lista").then((r) => r.data),
+  getDespacho: () => api.get("/motoboy/despacho").then((r) => r.data),
+  getTurnoAtual: (motoboyId) => api.get("/motoboy/turnos/atual", { params: motoboyId ? { motoboyId } : {} }).then((r) => r.data),
+  getHistorico: () => api.get("/motoboy/turnos/historico").then((r) => r.data),
+  abrirTurno: (data) => api.post("/motoboy/turnos/abrir", data).then((r) => r.data),
+  lancarExtra: (turnoId, data) => api.post(`/motoboy/turnos/${turnoId}/extras`, data).then((r) => r.data),
+  fecharTurno: (turnoId, data) => api.post(`/motoboy/turnos/${turnoId}/fechar`, data).then((r) => r.data),
+  conferirTurno: (turnoId) => api.post(`/motoboy/turnos/${turnoId}/conferir`).then((r) => r.data),
+  despachar: (orderId, motoboyId) => api.patch(`/orders/${orderId}/status`, { status: "SAIU_PARA_ENTREGA", motoboyId }).then((r) => r.data),
+  marcarEntregue: (orderId) => api.patch(`/orders/${orderId}/status`, { status: "ENTREGUE" }).then((r) => r.data),
+};
+
 export const authService = {
   login: (email, password) => api.post("/auth/login", { email, password }).then((r) => r.data),
   me: () => api.get("/auth/me").then((r) => r.data),

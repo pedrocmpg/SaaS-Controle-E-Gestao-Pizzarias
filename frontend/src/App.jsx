@@ -18,6 +18,8 @@ import OperacaoCardapio from "./pages/operacao/OperacaoCardapio";
 import OperacaoRelatorio from "./pages/operacao/OperacaoRelatorio";
 import OperacaoSalao from "./pages/operacao/OperacaoSalao";
 import OperacaoCaixa from "./pages/operacao/OperacaoCaixa";
+import OperacaoDespacho from "./pages/operacao/OperacaoDespacho";
+import OperacaoMotoboyTurno from "./pages/operacao/OperacaoMotoboyTurno";
 import { AdminAuthProvider } from "./context/AdminAuthContext";
 import { ToastProvider } from "./components/ui";
 
@@ -91,7 +93,7 @@ function OperacaoRoutes() {
       <Route path="/" element={<Navigate to="/operacao/pedidos" replace />} />
       <Route
         element={
-          <AdminRoute allowedRoles={["SUPER_ADMIN", "ADMIN", "GERENTE", "ATENDENTE"]}>
+          <AdminRoute allowedRoles={["SUPER_ADMIN", "ADMIN", "GERENTE", "ATENDENTE", "MOTOBOY"]}>
             <OperacaoLayout />
           </AdminRoute>
         }
@@ -99,6 +101,8 @@ function OperacaoRoutes() {
         <Route path="/pedidos" element={<OperacaoPedidos />} />
         <Route path="/salao" element={<OperacaoSalao />} />
         <Route path="/caixa" element={<OperacaoCaixa />} />
+        <Route path="/despacho" element={<OperacaoDespacho />} />
+        <Route path="/motoboy" element={<OperacaoMotoboyTurno />} />
         <Route
           path="/cardapio"
           element={

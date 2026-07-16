@@ -84,6 +84,20 @@ enum TipoMovimentoCaixa {
   SUPRIMENTO
 }
 
+enum StatusTurnoMotoboy {
+  ABERTO
+  FECHADO_AGUARDANDO_CONFERENCIA
+  CONFERIDO
+}
+
+/// Categoria de valor extra lançado no turno do motoboy (além de entregas + aluguel)
+enum TipoExtraMotoboy {
+  ENTREGA_LONGA
+  GORJETA
+  AJUDA_CUSTO
+  OUTRO
+}
+
 /// Tamanhos de pizza "Monte a sua" (Pequena, Média, Grande)
 model PizzaSize {
   id           Int      @id @default(autoincrement())
@@ -184,12 +198,24 @@ model Order {
   clienteId     Int?
   cliente       Cliente?     @relation(fields: [clienteId], references: [id])
   items         OrderItem[]
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+
+  // Módulo Motoboy: entregador designado ao sair para entrega, e o turno em que a entrega caiu.
+  // false = pago antecipado (PIX/online), true = cobrar em dinheiro/cartão na entrega.
+  cobradoNaEntrega Boolean       @default(true)
+  motoboyId        Int?
+  motoboy          Admin?        @relation("PedidosMotoboy", fields: [motoboyId], references: [id])
+  turnoMotoboyId   Int?
+  turnoMotoboy     TurnoMotoboy? @relation(fields: [turnoMotoboyId], references: [id])
+  entregueEm       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([lojaId, status])
   @@index([atendenteId])
   @@index([clienteId])
+  @@index([motoboyId, status])
+  @@index([turnoMotoboyId])
   @@map("orders")
 }
 
@@ -355,6 +381,77 @@ model MovimentoCaixa {
   @@map("movimentos_caixa")
 }
 
+/// Turno de trabalho de um motoboy (despacho + fechamento/sangria). Vários motoboys podem ter
+/// turno ABERTO ao mesmo tempo na mesma loja; o fechamento é sempre individual por motoboy.
+model TurnoMotoboy {
+  id     Int  @id @default(autoincrement())
+  lojaId Int
+  loja   Loja @relation(fields: [lojaId], references: [id])
+
+  motoboyId Int
+  motoboy   Admin              @relation("TurnosMotoboy", fields: [motoboyId], references: [id])
+  status    StatusTurnoMotoboy @default(ABERTO)
+
+  // Capital de giro que o motoboy leva pra rua pra dar troco; sempre retorna inteiro no acerto.
+  fundoTroco Decimal @db.Decimal(10, 2)
+
+  abertoPorId  Int
+  abertoPor    Admin     @relation("TurnoMotoboyAbertura", fields: [abertoPorId], references: [id])
+  abertoEm     DateTime  @default(now())
+  fechadoPorId Int?
+  fechadoPor   Admin?    @relation("TurnoMotoboyFechamento", fields: [fechadoPorId], references: [id])
+  fechadoEm    DateTime?
+
+  // Preenchidos no fechamento. valorPorEntrega/valorAluguelMoto são snapshot da config da loja
+  // no momento do fechamento (não recalculado se a config mudar depois).
+  totalEntregas    Int?
+  valorPorEntrega  Decimal? @db.Decimal(10, 2)
+  valorAluguelMoto Decimal? @db.Decimal(10, 2)
+  totalExtras      Decimal? @db.Decimal(10, 2)
+
+  // = (totalEntregas * valorPorEntrega) + totalExtras + valorAluguelMoto
+  valorDaNoite Decimal? @db.Decimal(10, 2)
+
+  // Dinheiro físico que o motoboy está segurando (inclui fundoTroco). Cartão/PIX são
+  // informativos, digitados manualmente do relatório da maquininha (fase 1).
+  totalRecebidoDinheiro Decimal? @db.Decimal(10, 2)
+  totalRecebidoCartao   Decimal? @db.Decimal(10, 2)
+  totalRecebidoPix      Decimal? @db.Decimal(10, 2)
+
+  // = (totalRecebidoDinheiro - fundoTroco) - valorDaNoite.
+  // > 0: motoboy deve repassar a diferença à pizzaria (sangria). < 0: pizzaria deve ao motoboy (nunca sangria).
+  acerto  Decimal? @db.Decimal(10, 2)
+  sangria Decimal? @db.Decimal(10, 2)
+
+  conferidoPorId Int?
+  conferidoPor   Admin?    @relation("TurnoMotoboyConferencia", fields: [conferidoPorId], references: [id])
+  conferidoEm    DateTime?
+
+  extras  ExtraMotoboy[]
+  pedidos Order[]
+
+  @@index([lojaId])
+  @@index([motoboyId])
+  @@map("turnos_motoboy")
+}
+
+/// Valor extra lançado no turno do motoboy (entrega longa, gorjeta, ajuda de custo, outro).
+/// Motivo é obrigatório (auditoria), mesmo padrão do MovimentoCaixa.
+model ExtraMotoboy {
+  id             Int              @id @default(autoincrement())
+  turnoMotoboyId Int
+  turnoMotoboy   TurnoMotoboy     @relation(fields: [turnoMotoboyId], references: [id])
+  tipo           TipoExtraMotoboy
+  valor          Decimal          @db.Decimal(10, 2)
+  motivo         String
+  adminId        Int
+  admin          Admin            @relation(fields: [adminId], references: [id])
+  createdAt      DateTime         @default(now())
+
+  @@index([turnoMotoboyId])
+  @@map("extras_motoboy")
+}
+
 /// Item de um pedido (snapshot dos dados no momento da compra)
 model OrderItem {
   id           Int     @id @default(autoincrement())
@@ -402,6 +499,14 @@ model Admin {
   caixasConferidos CaixaSessao[]    @relation("CaixaConferencia")
   movimentosCaixa  MovimentoCaixa[]
 
+  // Módulo Motoboy (role "MOTOBOY" quando o próprio entregador acessa o sistema)
+  pedidosEntregues        Order[]        @relation("PedidosMotoboy")
+  turnosMotoboy           TurnoMotoboy[] @relation("TurnosMotoboy")
+  turnosMotoboyAbertos    TurnoMotoboy[] @relation("TurnoMotoboyAbertura")
+  turnosMotoboyFechados   TurnoMotoboy[] @relation("TurnoMotoboyFechamento")
+  turnosMotoboyConferidos TurnoMotoboy[] @relation("TurnoMotoboyConferencia")
+  extrasMotoboyLancados   ExtraMotoboy[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -439,7 +544,7 @@ model AuditLog {
 /// Loja (unidade da rede). Dona da configuração e alvo dos pedidos.
 /// Por ora existe 1 registro em produção; a estrutura já suporta múltiplas lojas.
 model Loja {
-  id              Int            @id @default(autoincrement())
+  id              Int     @id @default(autoincrement())
   nome            String
   whatsapp        String // Criptografado no banco
   phone           String // Criptografado no banco
@@ -451,24 +556,30 @@ model Loja {
   instagramUrl    String?
   facebookUrl     String?
   openingHours    Json
-  minDeliveryFee  Decimal        @default(10) @db.Decimal(10, 2)
-  maxDeliveryFee  Decimal        @default(20) @db.Decimal(10, 2)
-  minDeliveryTime Int            @default(40)
-  maxDeliveryTime Int            @default(70)
-  isOpen          Boolean        @default(true)
-  pedidos         Order[]
-  admins          Admin[]
-  clientes        Cliente[]
-  pizzaSizes      PizzaSize[]
-  flavors         Flavor[]
-  borders         Border[]
-  products        Product[]
-  mesas           Mesa[]
-  rodizioPrecos   RodizioPreco[]
-  comandas        Comanda[]
-  caixaSessoes    CaixaSessao[]
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  minDeliveryFee  Decimal @default(10) @db.Decimal(10, 2)
+  maxDeliveryFee  Decimal @default(20) @db.Decimal(10, 2)
+  minDeliveryTime Int     @default(40)
+  maxDeliveryTime Int     @default(70)
+  isOpen          Boolean @default(true)
+
+  // Módulo Motoboy: valores configuráveis por loja (repasse por entrega + aluguel de moto/noite)
+  valorPorEntregaMotoboy Decimal @default(14) @db.Decimal(10, 2)
+  valorAluguelMotoNoite  Decimal @default(20) @db.Decimal(10, 2)
+
+  pedidos       Order[]
+  admins        Admin[]
+  clientes      Cliente[]
+  pizzaSizes    PizzaSize[]
+  flavors       Flavor[]
+  borders       Border[]
+  products      Product[]
+  mesas         Mesa[]
+  rodizioPrecos RodizioPreco[]
+  comandas      Comanda[]
+  caixaSessoes  CaixaSessao[]
+  turnosMotoboy TurnoMotoboy[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   @@map("lojas")
 }

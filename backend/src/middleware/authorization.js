@@ -24,6 +24,10 @@ const ROLES = {
     name: "Atendente",
     permissions: ["read:all"],
   },
+  MOTOBOY: {
+    name: "Motoboy",
+    permissions: [],
+  },
 };
 
 /**

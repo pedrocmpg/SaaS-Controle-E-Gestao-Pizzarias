@@ -105,9 +105,21 @@ function emitPedidoStatus(lojaId, order) {
   if (io) io.to(`loja:${lojaId}`).emit("pedido:status_atualizado", order);
 }
 
+/** Emite evento de pedido despachado a um motoboy (tela de despacho ao vivo). */
+function emitDespachoAtribuido(lojaId, order) {
+  if (io) io.to(`loja:${lojaId}`).emit("despacho:atribuido", order);
+}
+
+/** Emite evento de pedido entregue pelo motoboy (tela de despacho ao vivo). */
+function emitDespachoEntregue(lojaId, order) {
+  if (io) io.to(`loja:${lojaId}`).emit("despacho:entregue", order);
+}
+
 module.exports = {
   initSocket,
   getIo,
   emitPedidoNovo,
   emitPedidoStatus,
+  emitDespachoAtribuido,
+  emitDespachoEntregue,
 };

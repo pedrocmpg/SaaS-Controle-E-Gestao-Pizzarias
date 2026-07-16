@@ -14,7 +14,10 @@ let fallbackBlacklist = new Set(); // Fallback se Redis não estiver disponível
 function isRedisAvailable() {
   try {
     const client = getRedisClient();
-    return client && client.isOpen;
+    // isReady (não isOpen) é o que importa: isOpen fica true durante reconexão em andamento,
+    // e um comando enviado nesse estado entra na offline queue e nunca resolve nem rejeita
+    // enquanto o Redis não conectar de verdade — travando a requisição HTTP inteira.
+    return client && client.isReady;
   } catch (err) {
     return false;
   }
