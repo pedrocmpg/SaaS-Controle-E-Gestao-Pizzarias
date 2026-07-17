@@ -171,9 +171,43 @@ model Product {
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
   comandaItens ComandaItem[]
+  ofertas      OfertaProduto[]
 
   @@index([lojaId])
   @@map("products")
+}
+
+/// Oferta/promoção de cardápio: vincula produtos específicos com um preço
+/// promocional e (opcionalmente) uma janela de validade. Distinta de
+/// Product.category=COMBO/ESPECIAL — Oferta é uma composição de produtos
+/// existentes, não um item de cardápio próprio.
+model Oferta {
+  id               Int             @id @default(autoincrement())
+  lojaId           Int
+  loja             Loja            @relation(fields: [lojaId], references: [id])
+  name             String
+  description      String?
+  precoPromocional Decimal         @db.Decimal(10, 2)
+  validoDe         DateTime?
+  validoAte        DateTime?
+  active           Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  produtos         OfertaProduto[]
+
+  @@index([lojaId])
+  @@map("ofertas")
+}
+
+/// Tabela de junção Oferta <-> Product (many-to-many)
+model OfertaProduto {
+  ofertaId  Int
+  oferta    Oferta  @relation(fields: [ofertaId], references: [id], onDelete: Cascade)
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([ofertaId, productId])
+  @@map("ofertas_produtos")
 }
 
 /// Pedido feito por um cliente
@@ -471,14 +505,15 @@ model OrderItem {
 
 /// Usuário administrador (painel de gestão)
 model Admin {
-  id           Int    @id @default(autoincrement())
+  id           Int     @id @default(autoincrement())
   // Loja à qual o operador pertence. Nullable: SUPER_ADMIN pode ser global (sem loja).
   lojaId       Int?
-  loja         Loja?  @relation(fields: [lojaId], references: [id])
+  loja         Loja?   @relation(fields: [lojaId], references: [id])
   name         String
-  email        String @unique
+  email        String  @unique
   passwordHash String
-  role         String @default("ADMIN") // SUPER_ADMIN, ADMIN, VIEWER
+  role         String  @default("ADMIN") // SUPER_ADMIN, ADMIN, VIEWER
+  active       Boolean @default(true) // false = desativado: bloqueado no login/sessão, mas preserva histórico (turnos, pedidos)
 
   // 2FA - TOTP
   totpSecret  String? // Secret para geração de TOTP (Google Authenticator)
@@ -578,6 +613,7 @@ model Loja {
   comandas      Comanda[]
   caixaSessoes  CaixaSessao[]
   turnosMotoboy TurnoMotoboy[]
+  ofertas       Oferta[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 

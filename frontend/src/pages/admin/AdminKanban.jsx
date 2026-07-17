@@ -5,11 +5,10 @@ import {
   STATUS_FLOW,
   TERMINAL_STATUSES,
   statusLabels,
-  statusColors,
   columnAccent,
   getNextStatus,
 } from "../../services/orderStatus";
-import AdminHeader from "../../components/AdminHeader";
+import { StatusBadge } from "../../components/ui/Badge";
 
 // Colunas do Kanban: fluxo + cancelados (visualmente separado)
 const COLUMNS = [...STATUS_FLOW, "CANCELADO"];
@@ -118,62 +117,58 @@ export default function AdminKanban() {
   const ordersByStatus = (status) => orders.filter((o) => o.status === status);
 
   return (
-    <div className="min-h-screen bg-brand-50">
-      <AdminHeader />
+    <div>
+      <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
+        <h1 className="text-2xl font-display font-semibold text-char">Pedidos</h1>
+        <button onClick={loadOrders} className="btn-secondary text-sm">
+          Atualizar
+        </button>
+      </div>
 
-      <main className="container-app py-8">
-        <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
-          <h1 className="text-2xl font-bold text-brand-900">Pedidos</h1>
-          <button onClick={loadOrders} className="btn-secondary text-sm">
-            Atualizar
-          </button>
+      {error && (
+        <p className="text-red-500 mb-4 cursor-pointer" onClick={() => setError(null)}>
+          {error} (clique para dispensar)
+        </p>
+      )}
+
+      {loading ? (
+        <p className="text-gray-500">Carregando pedidos...</p>
+      ) : (
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {COLUMNS.map((status) => {
+            const columnOrders = ordersByStatus(status);
+            return (
+              <section
+                key={status}
+                className={`flex-shrink-0 w-80 bg-white/60 rounded-2xl border-t-4 ${columnAccent[status]} p-3`}
+              >
+                <div className="flex items-center justify-between mb-3 px-1">
+                  <h2 className="font-semibold text-char">{statusLabels[status]}</h2>
+                  <span className="text-xs font-semibold text-gray-500 bg-white rounded-full px-2 py-0.5">
+                    {columnOrders.length}
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  {columnOrders.length === 0 ? (
+                    <p className="text-xs text-gray-400 px-1 py-6 text-center">Sem pedidos</p>
+                  ) : (
+                    columnOrders.map((order) => (
+                      <OrderCard
+                        key={order.id}
+                        order={order}
+                        highlighted={highlighted.has(order.id)}
+                        onAdvance={changeStatus}
+                        onCancel={changeStatus}
+                      />
+                    ))
+                  )}
+                </div>
+              </section>
+            );
+          })}
         </div>
-
-        {error && (
-          <p className="text-red-500 mb-4 cursor-pointer" onClick={() => setError(null)}>
-            {error} (clique para dispensar)
-          </p>
-        )}
-
-        {loading ? (
-          <p className="text-gray-500">Carregando pedidos...</p>
-        ) : (
-          <div className="flex gap-4 overflow-x-auto pb-4">
-            {COLUMNS.map((status) => {
-              const columnOrders = ordersByStatus(status);
-              return (
-                <section
-                  key={status}
-                  className={`flex-shrink-0 w-80 bg-white/60 rounded-2xl border-t-4 ${columnAccent[status]} p-3`}
-                >
-                  <div className="flex items-center justify-between mb-3 px-1">
-                    <h2 className="font-semibold text-brand-900">{statusLabels[status]}</h2>
-                    <span className="text-xs font-semibold text-gray-500 bg-white rounded-full px-2 py-0.5">
-                      {columnOrders.length}
-                    </span>
-                  </div>
-
-                  <div className="space-y-3">
-                    {columnOrders.length === 0 ? (
-                      <p className="text-xs text-gray-400 px-1 py-6 text-center">Sem pedidos</p>
-                    ) : (
-                      columnOrders.map((order) => (
-                        <OrderCard
-                          key={order.id}
-                          order={order}
-                          highlighted={highlighted.has(order.id)}
-                          onAdvance={changeStatus}
-                          onCancel={changeStatus}
-                        />
-                      ))
-                    )}
-                  </div>
-                </section>
-              );
-            })}
-          </div>
-        )}
-      </main>
+      )}
     </div>
   );
 }
@@ -196,9 +191,7 @@ function OrderCard({ order, highlighted, onAdvance, onCancel }) {
           <p className="text-xs text-gray-500">{order.phone}</p>
           {order.address && <p className="text-xs text-gray-500">{order.address}</p>}
         </div>
-        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusColors[order.status]}`}>
-          {statusLabels[order.status]}
-        </span>
+        <StatusBadge domain="pedido" value={order.status} className="text-[10px] px-2 py-0.5" />
       </div>
 
       <ul className="mt-3 border-t border-black/5 pt-2 space-y-1 text-xs text-gray-700">
@@ -213,7 +206,7 @@ function OrderCard({ order, highlighted, onAdvance, onCancel }) {
       </ul>
 
       <div className="flex items-center justify-between mt-3">
-        <p className="font-bold text-accent-600 text-sm">
+        <p className="font-price font-bold text-accent-600 text-sm">
           R$ {Number(order.totalPrice).toFixed(2)}
         </p>
         <span className="text-[10px] text-gray-400">

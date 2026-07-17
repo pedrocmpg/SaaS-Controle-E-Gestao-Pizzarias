@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { X } from "lucide-react";
 
 /**
  * Componente Modal reutilizável com backdrop, animações e acessibilidade
@@ -78,10 +79,10 @@ export function Modal({
             {closeButton && (
               <button
                 onClick={onClose}
-                className="text-2xl leading-none text-gray-400 hover:text-gray-600 transition"
+                className="text-gray-400 hover:text-gray-600 transition"
                 aria-label="Fechar"
               >
-                ✕
+                <X size={22} />
               </button>
             )}
           </div>

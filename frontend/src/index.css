@@ -115,6 +115,6 @@ h1, h2, h3, h4 {
     @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
   }
   .font-price {
-    @apply font-mono font-medium;
+    @apply font-mono font-medium tabular-nums;
   }
 }

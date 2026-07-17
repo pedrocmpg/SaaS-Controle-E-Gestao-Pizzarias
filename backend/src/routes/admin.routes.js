@@ -17,13 +17,16 @@ const router = express.Router();
 router.get("/users", requireAuth, requireRole("SUPER_ADMIN"), adminReadLimiter, async (req, res, next) => {
   try {
     const ip = req.ip || req.connection.remoteAddress;
+    const { role } = req.query;
 
     const admins = await prisma.admin.findMany({
+      where: role ? { role } : undefined,
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
+        active: true,
         totpEnabled: true,
         lastLoginAt: true,
         lastLoginIp: true,
@@ -60,6 +63,7 @@ router.get("/users/:id", requireAuth, requireRole("SUPER_ADMIN"), adminReadLimit
         name: true,
         email: true,
         role: true,
+        active: true,
         totpEnabled: true,
         lastLoginAt: true,
         lastLoginIp: true,
@@ -93,7 +97,7 @@ router.post(
       name: Joi.string().min(2).max(100).required(),
       email: Joi.string().email().required(),
       password: Joi.string().min(8).max(128).required(),
-      role: Joi.string().valid("SUPER_ADMIN", "ADMIN", "VIEWER", "GERENTE", "ATENDENTE").default("VIEWER"),
+      role: Joi.string().valid("SUPER_ADMIN", "ADMIN", "VIEWER", "GERENTE", "ATENDENTE", "MOTOBOY").default("VIEWER"),
     })
   ),
   async (req, res, next) => {
@@ -123,6 +127,7 @@ router.post(
           name: true,
           email: true,
           role: true,
+          active: true,
           createdAt: true,
         },
       });
@@ -150,7 +155,8 @@ router.put(
   validateRequest(
     Joi.object({
       name: Joi.string().min(2).max(100).optional(),
-      role: Joi.string().valid("SUPER_ADMIN", "ADMIN", "VIEWER", "GERENTE", "ATENDENTE").optional(),
+      role: Joi.string().valid("SUPER_ADMIN", "ADMIN", "VIEWER", "GERENTE", "ATENDENTE", "MOTOBOY").optional(),
+      active: Joi.boolean().optional(),
     })
   ),
   async (req, res, next) => {
@@ -194,6 +200,7 @@ router.put(
           name: true,
           email: true,
           role: true,
+          active: true,
           updatedAt: true,
         },
       });

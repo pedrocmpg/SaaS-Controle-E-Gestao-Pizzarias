@@ -247,6 +247,27 @@ const productSchema = Joi.object({
 });
 
 /**
+ * Schema para criar/editar oferta (vincula produtos existentes a um preço promocional)
+ */
+const ofertaSchema = Joi.object({
+  name: Joi.string().max(100).required(),
+  description: Joi.string().max(500).allow(null, ""),
+  precoPromocional: Joi.number().positive().required(),
+  validoDe: Joi.date().allow(null),
+  validoAte: Joi.date().allow(null),
+  active: Joi.boolean(),
+  productIds: Joi.array().items(Joi.number().integer().positive()).min(1).required(),
+});
+
+/**
+ * Schema para edição parcial de oferta (preço/disponibilidade, sem mexer nos produtos vinculados)
+ */
+const ofertaPatchSchema = Joi.object({
+  precoPromocional: Joi.number().positive(),
+  active: Joi.boolean(),
+}).min(1);
+
+/**
  * Schema para edição parcial de tamanho de pizza (preço/disponibilidade)
  */
 // Nota: o schema pizzaSizeSchema (criação) usa "basePrice", mas o campo real no
@@ -455,6 +476,8 @@ module.exports = {
   flavorSchema,
   borderSchema,
   productSchema,
+  ofertaSchema,
+  ofertaPatchSchema,
   pizzaSizePatchSchema,
   flavorPatchSchema,
   borderPatchSchema,

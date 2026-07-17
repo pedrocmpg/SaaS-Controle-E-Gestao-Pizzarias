@@ -32,7 +32,10 @@ router.post("/login", loginLimiter, validateRequest(loginSchema), async (req, re
     const { email, password, totpCode, backupCode } = req.body;
     const ip = req.ip || req.connection.remoteAddress;
 
-    const admin = await prisma.admin.findUnique({ where: { email } });
+    const admin = await prisma.admin.findUnique({
+      where: { email },
+      include: { loja: { select: { nome: true } } },
+    });
 
     if (!admin) {
       logLoginAttempt(email, false, ip, req.get("user-agent"));
@@ -42,6 +45,11 @@ router.post("/login", loginLimiter, validateRequest(loginSchema), async (req, re
     const passwordMatches = await bcrypt.compare(password, admin.passwordHash);
 
     if (!passwordMatches) {
+      logLoginAttempt(email, false, ip, req.get("user-agent"));
+      return res.status(401).json({ error: "Credenciais inválidas." });
+    }
+
+    if (admin.active === false) {
       logLoginAttempt(email, false, ip, req.get("user-agent"));
       return res.status(401).json({ error: "Credenciais inválidas." });
     }
@@ -116,7 +124,14 @@ router.post("/login", loginLimiter, validateRequest(loginSchema), async (req, re
     res.json({
       status: "SUCCESS",
       expiresIn: process.env.JWT_EXPIRES_IN || "8h",
-      admin: { id: admin.id, name: admin.name, email: admin.email, role: admin.role || "VIEWER", lojaId: admin.lojaId ?? null },
+      admin: {
+        id: admin.id,
+        name: admin.name,
+        email: admin.email,
+        role: admin.role || "VIEWER",
+        lojaId: admin.lojaId ?? null,
+        loja: admin.loja ? { nome: admin.loja.nome } : null,
+      },
       token,
     });
   } catch (err) {
@@ -144,6 +159,7 @@ router.get("/me", requireAuth, async (req, res, next) => {
         totpEnabled: true,
         lastLoginAt: true,
         lastLoginIp: true,
+        loja: { select: { nome: true } },
       },
     });
 
