@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useState } from "react";
+import { CheckCircle2, XCircle, Info, AlertTriangle, X } from "lucide-react";
 
 /**
  * Sistema de Toast com suporte a múltiplos tipos (success, error, info, warning)
@@ -69,26 +70,26 @@ function ToastItem({ toast, onRemove }) {
 
   const typeStyles = {
     success: {
-      bg: "bg-green-500",
-      icon: "✓",
+      bg: "bg-success-500",
+      Icon: CheckCircle2,
       text: "text-white",
       role: "status",
     },
     error: {
-      bg: "bg-red-500",
-      icon: "✕",
+      bg: "bg-danger-500",
+      Icon: XCircle,
       text: "text-white",
       role: "alert",
     },
     info: {
       bg: "bg-blue-500",
-      icon: "ℹ",
+      Icon: Info,
       text: "text-white",
       role: "status",
     },
     warning: {
-      bg: "bg-yellow-500",
-      icon: "⚠",
+      bg: "bg-warning-500",
+      Icon: AlertTriangle,
       text: "text-white",
       role: "alert",
     },
@@ -113,16 +114,14 @@ function ToastItem({ toast, onRemove }) {
       aria-live="polite"
       aria-atomic="true"
     >
-      <span className="text-lg font-bold flex-shrink-0 mt-0.5" aria-hidden="true">
-        {style.icon}
-      </span>
+      <style.Icon size={18} className="flex-shrink-0 mt-0.5" aria-hidden="true" />
       <p className="text-sm font-medium flex-1">{toast.message}</p>
       <button
         onClick={handleClose}
-        className="flex-shrink-0 text-lg leading-none opacity-70 hover:opacity-100 transition focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-white rounded"
+        className="flex-shrink-0 opacity-70 hover:opacity-100 transition focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-white rounded"
         aria-label="Fechar notificação"
       >
-        ✕
+        <X size={16} />
       </button>
     </div>
   );

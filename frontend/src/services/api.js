@@ -45,6 +45,27 @@ export const catalogService = {
   patchFlavor: (id, data) => api.patch(`/catalog/flavors/${id}`, data).then((r) => r.data),
   patchBorder: (id, data) => api.patch(`/catalog/borders/${id}`, data).then((r) => r.data),
   patchProduct: (id, data) => api.patch(`/catalog/products/${id}`, data).then((r) => r.data),
+  createSize: (data) => api.post("/catalog/sizes", data).then((r) => r.data),
+  updateSize: (id, data) => api.put(`/catalog/sizes/${id}`, data).then((r) => r.data),
+  deleteSize: (id) => api.delete(`/catalog/sizes/${id}`).then((r) => r.data),
+  createFlavor: (data) => api.post("/catalog/flavors", data).then((r) => r.data),
+  updateFlavor: (id, data) => api.put(`/catalog/flavors/${id}`, data).then((r) => r.data),
+  deleteFlavor: (id) => api.delete(`/catalog/flavors/${id}`).then((r) => r.data),
+  createBorder: (data) => api.post("/catalog/borders", data).then((r) => r.data),
+  updateBorder: (id, data) => api.put(`/catalog/borders/${id}`, data).then((r) => r.data),
+  deleteBorder: (id) => api.delete(`/catalog/borders/${id}`).then((r) => r.data),
+  createProduct: (data) => api.post("/catalog/products", data).then((r) => r.data),
+  updateProduct: (id, data) => api.put(`/catalog/products/${id}`, data).then((r) => r.data),
+  deleteProduct: (id) => api.delete(`/catalog/products/${id}`).then((r) => r.data),
+};
+
+export const ofertasService = {
+  list: () => api.get("/ofertas").then((r) => r.data),
+  getProdutosDisponiveis: () => api.get("/ofertas/produtos-disponiveis").then((r) => r.data),
+  create: (data) => api.post("/ofertas", data).then((r) => r.data),
+  update: (id, data) => api.put(`/ofertas/${id}`, data).then((r) => r.data),
+  patch: (id, data) => api.patch(`/ofertas/${id}`, data).then((r) => r.data),
+  remove: (id) => api.delete(`/ofertas/${id}`).then((r) => r.data),
 };
 
 export const settingsService = {
@@ -101,5 +122,12 @@ export const authService = {
 };
 
 export const adminUsersService = {
-  create: (data) => api.post("/admin/users", data).then((r) => r.data),
+  list: (role) => api.get("/admin/users", { params: role ? { role } : {} }).then((r) => r.data.admins),
+  get: (id) => api.get(`/admin/users/${id}`).then((r) => r.data.admin),
+  create: (data) => api.post("/admin/users", data).then((r) => r.data.admin),
+  update: (id, data) => api.put(`/admin/users/${id}`, data).then((r) => r.data.admin),
+  // Hard delete — não usado no fluxo de "excluir" das telas de cadastro (ver
+  // update com { active: false }), pois falha com FK se o admin tiver
+  // histórico de turno/pedido. Mantido só por paridade com o endpoint.
+  remove: (id) => api.delete(`/admin/users/${id}`).then((r) => r.data),
 };

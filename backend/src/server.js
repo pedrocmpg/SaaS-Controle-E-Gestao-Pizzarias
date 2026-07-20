@@ -25,6 +25,7 @@ const auditRoutes = require("./routes/audit.routes");
 const salaoRoutes = require("./routes/salao.routes");
 const caixaRoutes = require("./routes/caixa.routes");
 const motoboyRoutes = require("./routes/motoboy.routes");
+const ofertasRoutes = require("./routes/ofertas.routes");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -88,6 +89,7 @@ app.use("/api/audit", auditRoutes);
 app.use("/api/salao", salaoRoutes);
 app.use("/api/caixa", caixaRoutes);
 app.use("/api/motoboy", motoboyRoutes);
+app.use("/api/ofertas", ofertasRoutes);
 
 // 404
 app.use((req, res) => {

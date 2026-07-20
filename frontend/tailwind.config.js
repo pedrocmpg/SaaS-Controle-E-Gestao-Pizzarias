@@ -54,6 +54,33 @@ export default {
           800: "#571a10",
           900: "#2e0d08",
         },
+        // Aliases semânticos pro StatusBadge e feedback visual em geral —
+        // um lugar único pra mudar a cor de cada significado (spec-4).
+        // Não são preparação pra dark mode, só evitam hex solto nos componentes.
+        success: {
+          50: "#EEF3EA",
+          100: "#DCE7D5",
+          500: "#4C6B3C", // = basil
+          700: "#374F2B",
+        },
+        warning: {
+          50: "#FDF3E3",
+          100: "#FBE7C7",
+          500: "#E8A33D", // = melt
+          700: "#B87C22",
+        },
+        danger: {
+          50: "#FDECEC",
+          100: "#FBD5D5",
+          500: "#D23838",
+          700: "#A12727",
+        },
+        neutral: {
+          50: "#F5F4F2",
+          100: "#E9E7E3",
+          500: "#8A8178",
+          700: "#57504A",
+        },
       },
       fontFamily: {
         display: ["'Fraunces'", "serif"],
