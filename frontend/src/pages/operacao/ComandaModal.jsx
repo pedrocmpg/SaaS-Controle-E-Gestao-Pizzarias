@@ -10,11 +10,15 @@ const PAYMENT_METHODS = [
 ];
 
 const inputClass = "w-full border border-flour-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-char";
+const brl = (v) => `R$ ${Number(v || 0).toFixed(2)}`;
 
 /**
- * Modal da comanda: grade de grupos/botões configurável (spec-5) — clique num
- * grupo mostra seus botões; clique num botão lança direto (PRODUTO) ou abre o
- * montador (PIZZA). Produtos de categoria RODIZIO pedem quantidade antes de lançar.
+ * PDV de tela cheia da comanda (spec-5). Layout de caixa:
+ * - Esquerda: grade de grupos (abas) + botões sempre visíveis. Clique lança
+ *   direto (PRODUTO) ou abre o montador (PIZZA); RODIZIO pede quantidade.
+ * - Direita: comanda fixa, com editar quantidade (+/-), remover (com confirmação)
+ *   e fechamento (resumo + cálculo de troco quando dinheiro).
+ * Mantém o nome/props (comandaId, onClose, onClosed) usados por OperacaoSalao.
  */
 export default function ComandaModal({ comandaId, onClose, onClosed }) {
   const [comanda, setComanda] = useState(null);
@@ -29,9 +33,12 @@ export default function ComandaModal({ comandaId, onClose, onClosed }) {
   const [botaoPizza, setBotaoPizza] = useState(null);
   const [botaoRodizio, setBotaoRodizio] = useState(null);
   const [quantidadeRodizio, setQuantidadeRodizio] = useState(1);
+  const [confirmRemoveId, setConfirmRemoveId] = useState(null);
 
-  const [paymentMethod, setPaymentMethod] = useState("DINHEIRO");
+  // Fechamento
   const [showFechar, setShowFechar] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("DINHEIRO");
+  const [valorRecebido, setValorRecebido] = useState("");
 
   function reload() {
     return salaoService.getComanda(comandaId).then(setComanda);
@@ -40,7 +47,11 @@ export default function ComandaModal({ comandaId, onClose, onClosed }) {
   useEffect(() => {
     Promise.all([
       reload(),
-      pdvConfigService.getGrupos().then((gs) => setGrupos(gs.filter((g) => g.ativo))),
+      pdvConfigService.getGrupos().then((gs) => {
+        const ativos = gs.filter((g) => g.ativo);
+        setGrupos(ativos);
+        if (ativos.length > 0) setGrupoAbertoId(ativos[0].id); // primeiro grupo já aberto
+      }),
       pdvConfigService.getLojaConfig().then(setConfig),
       catalogService.getProducts().then((products) => {
         setProductsById(Object.fromEntries(products.map((p) => [p.id, p])));
@@ -83,11 +94,31 @@ export default function ComandaModal({ comandaId, onClose, onClosed }) {
     setBotaoRodizio(null);
   }
 
+  async function alterarQuantidade(item, delta) {
+    const nova = item.quantidade + delta;
+    if (nova < 1) {
+      // Chegou a zero: trata como remoção (com confirmação).
+      setConfirmRemoveId(item.id);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await salaoService.updateItemQuantidade(comandaId, item.id, nova);
+      await reload();
+    } catch (err) {
+      setError(err.response?.data?.error || "Não foi possível alterar a quantidade.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function removeItem(itemId) {
     setBusy(true);
     setError(null);
     try {
       await salaoService.removeItem(comandaId, itemId);
+      setConfirmRemoveId(null);
       await reload();
     } catch (err) {
       setError(err.response?.data?.error || "Não foi possível remover o item.");
@@ -110,97 +141,81 @@ export default function ComandaModal({ comandaId, onClose, onClosed }) {
   }
 
   const grupoAberto = grupos.find((g) => g.id === grupoAbertoId) || null;
+  const total = comanda ? Number(comanda.totalPrice) : 0;
+  const qtdItens = comanda ? comanda.itens.reduce((s, i) => s + i.quantidade, 0) : 0;
+
+  // Troco (só faz sentido pra dinheiro).
+  const recebidoNum = parseFloat(valorRecebido.replace(",", "."));
+  const troco = paymentMethod === "DINHEIRO" && !isNaN(recebidoNum) ? recebidoNum - total : null;
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4">
-      <div className="bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl max-h-[92vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b border-flour-2 flex-shrink-0">
+    <div className="fixed inset-0 z-40 bg-flour flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-flour-2 bg-white flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <button onClick={onClose} className="text-2xl leading-none text-ink-soft hover:text-char" aria-label="Voltar">
+            ←
+          </button>
           <h2 className="text-lg font-display font-semibold text-char">
             {comanda?.numeroMesa != null ? `Mesa ${comanda.numeroMesa}` : "Balcão"}
           </h2>
-          <button onClick={onClose} className="text-2xl leading-none text-ink-soft hover:text-char px-2" aria-label="Fechar">
-            ✕
-          </button>
         </div>
+        <span className="text-sm text-ink-soft">
+          {qtdItens} {qtdItens === 1 ? "item" : "itens"}
+        </span>
+      </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-5">
-          {error && (
-            <p className="text-red-500 text-sm cursor-pointer" onClick={() => setError(null)}>
-              {error} (clique para dispensar)
-            </p>
-          )}
+      {error && (
+        <p className="text-red-500 text-sm cursor-pointer px-4 sm:px-6 py-2 bg-red-50" onClick={() => setError(null)}>
+          {error} (clique para dispensar)
+        </p>
+      )}
 
-          {loading ? (
-            <p className="text-ink-soft text-sm">Carregando...</p>
-          ) : (
-            <>
-              <div>
-                <h3 className="text-xs font-semibold text-ink-soft uppercase tracking-wide mb-2">Itens da comanda</h3>
-                {comanda.itens.length === 0 ? (
-                  <p className="text-ink-soft text-sm mb-3">Nenhum item adicionado.</p>
-                ) : (
-                  <ul className="mb-3 divide-y divide-flour-2 border border-flour-2 rounded-lg">
-                    {comanda.itens.map((item) => (
-                      <li key={item.id} className="px-3 py-2 text-sm">
-                        <div className="flex items-center justify-between">
-                          <span>
-                            {item.quantidade}x {item.descricao}
-                          </span>
-                          <span className="flex items-center gap-3">
-                            <span className="font-mono">R$ {(Number(item.unitPrice) * item.quantidade).toFixed(2)}</span>
-                            <button
-                              onClick={() => removeItem(item.id)}
-                              disabled={busy}
-                              className="text-red-500 hover:text-red-600 disabled:opacity-50"
-                              aria-label="Remover item"
-                            >
-                              ✕
-                            </button>
-                          </span>
-                        </div>
-                        {item.sabroesSnapshot?.length > 0 && (
-                          <p className="text-xs text-ink-soft mt-1">
-                            {item.sabroesSnapshot.map((s) => s.nome).join(", ")}
-                          </p>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              {grupos.length === 0 ? (
-                <p className="text-ink-soft text-sm">Nenhum grupo configurado na grade do PDV.</p>
-              ) : (
-                <div>
-                  <p className="text-xs font-semibold text-ink-soft mb-2">Grupos</p>
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {grupos.map((grupo) => (
+      {loading ? (
+        <p className="text-ink-soft text-sm p-6">Carregando...</p>
+      ) : (
+        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+          {/* ESQUERDA: grade de produtos */}
+          <div className="flex-1 flex flex-col overflow-hidden border-b lg:border-b-0 lg:border-r border-flour-2">
+            {grupos.length === 0 ? (
+              <p className="text-ink-soft text-sm p-6">Nenhum grupo configurado na grade do PDV.</p>
+            ) : (
+              <>
+                {/* Abas de grupos — sempre visíveis */}
+                <div className="flex gap-2 overflow-x-auto px-4 sm:px-6 py-3 flex-shrink-0 border-b border-flour-2">
+                  {grupos.map((grupo) => {
+                    const ativo = grupo.id === grupoAbertoId;
+                    return (
                       <button
                         key={grupo.id}
-                        onClick={() => setGrupoAbertoId(grupo.id === grupoAbertoId ? null : grupo.id)}
-                        className="px-3 py-1.5 rounded-full text-xs font-semibold transition"
+                        onClick={() => setGrupoAbertoId(grupo.id)}
+                        className="px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition"
                         style={{
-                          backgroundColor: grupo.id === grupoAbertoId ? grupo.cor || "#E67E22" : "transparent",
-                          color: grupo.id === grupoAbertoId ? grupo.corFonte || "#FFFFFF" : undefined,
+                          backgroundColor: ativo ? grupo.cor || "#E67E22" : "transparent",
+                          color: ativo ? grupo.corFonte || "#FFFFFF" : undefined,
                           border: `1px solid ${grupo.cor || "#9CA3AF"}`,
                         }}
                       >
                         {grupo.nome}
                       </button>
-                    ))}
-                  </div>
+                    );
+                  })}
+                </div>
 
-                  {grupoAberto && (
-                    <div className="flex flex-wrap gap-2">
-                      {(grupoAberto.botoes || [])
+                {/* Botões do grupo aberto — grade grande */}
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+                  {grupoAberto && (grupoAberto.botoes || []).filter((b) => b.ativo).length === 0 ? (
+                    <p className="text-ink-soft text-sm">Nenhum botão neste grupo.</p>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                      {(grupoAberto?.botoes || [])
                         .filter((b) => b.ativo)
                         .map((botao) => (
                           <button
                             key={botao.id}
                             onClick={() => handleBotaoClick(botao)}
                             disabled={busy}
-                            className="px-3 py-2 rounded-lg text-xs font-semibold border border-flour-2 hover:bg-flour-2 disabled:opacity-50"
+                            className="aspect-square rounded-xl text-sm font-semibold border border-flour-2 hover:shadow-md hover:border-ember-500/50 disabled:opacity-50 transition flex items-center justify-center text-center p-3 bg-white"
                             style={{ backgroundColor: botao.cor || undefined }}
                           >
                             {botao.labelBotao}
@@ -209,52 +224,149 @@ export default function ComandaModal({ comandaId, onClose, onClosed }) {
                     </div>
                   )}
                 </div>
-              )}
+              </>
+            )}
+          </div>
 
-              {showFechar && (
-                <div className="border border-flour-2 rounded-lg p-3">
-                  <p className="text-xs font-semibold text-ink-soft mb-2">Forma de pagamento</p>
-                  <select className={inputClass} value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-                    {PAYMENT_METHODS.map((p) => (
-                      <option key={p.value} value={p.value}>
-                        {p.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+          {/* DIREITA: comanda fixa */}
+          <div className="w-full lg:w-96 flex flex-col bg-white overflow-hidden flex-shrink-0">
+            <h3 className="text-xs font-semibold text-ink-soft uppercase tracking-wide px-4 py-3 border-b border-flour-2 flex-shrink-0">
+              Itens da comanda
+            </h3>
 
-        {!loading && (
-          <div className="flex items-center justify-between gap-4 p-4 border-t border-flour-2 flex-shrink-0">
-            <div className="text-sm">
-              <span className="text-ink-soft">Total: </span>
-              <span className="font-mono font-semibold text-char">R$ {Number(comanda.totalPrice).toFixed(2)}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={onClose} className="btn-secondary text-sm">
-                Voltar
-              </button>
-              {showFechar ? (
-                <button onClick={fecharComanda} disabled={busy} className="btn-primary text-sm disabled:opacity-50">
-                  {busy ? "Fechando..." : "Confirmar fechamento"}
-                </button>
+            <div className="flex-1 overflow-y-auto px-4 py-2">
+              {comanda.itens.length === 0 ? (
+                <p className="text-ink-soft text-sm py-4">Nenhum item adicionado.</p>
               ) : (
-                <button
-                  onClick={() => setShowFechar(true)}
-                  disabled={busy || comanda.itens.length === 0}
-                  className="btn-primary text-sm disabled:opacity-50"
-                >
-                  Fechar comanda
-                </button>
+                <ul className="divide-y divide-flour-2">
+                  {comanda.itens.map((item) => (
+                    <li key={item.id} className="py-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm text-char truncate">{item.descricao}</p>
+                          {item.sabroesSnapshot?.length > 0 && (
+                            <p className="text-xs text-ink-soft mt-0.5">
+                              {item.sabroesSnapshot.map((s) => s.nome).join(", ")}
+                            </p>
+                          )}
+                          <p className="text-xs text-ink-soft font-mono mt-0.5">{brl(item.unitPrice)} un.</p>
+                        </div>
+                        <span className="font-mono text-sm text-char whitespace-nowrap">
+                          {brl(Number(item.unitPrice) * item.quantidade)}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-2">
+                        {/* Stepper de quantidade */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => alterarQuantidade(item, -1)}
+                            disabled={busy}
+                            className="w-7 h-7 rounded-full border border-flour-2 text-ink-soft hover:border-char disabled:opacity-40 leading-none"
+                            aria-label="Diminuir"
+                          >
+                            −
+                          </button>
+                          <span className="font-mono text-sm w-6 text-center">{item.quantidade}</span>
+                          <button
+                            onClick={() => alterarQuantidade(item, 1)}
+                            disabled={busy}
+                            className="w-7 h-7 rounded-full border border-flour-2 text-ink-soft hover:border-char disabled:opacity-40 leading-none"
+                            aria-label="Aumentar"
+                          >
+                            +
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => setConfirmRemoveId(item.id)}
+                          disabled={busy}
+                          className="text-xs text-red-500 hover:text-red-600 disabled:opacity-50"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* Rodapé: total + ações / fechamento */}
+            <div className="border-t border-flour-2 p-4 flex-shrink-0 space-y-3">
+              {showFechar ? (
+                <>
+                  <div>
+                    <p className="text-xs font-semibold text-ink-soft mb-1">Forma de pagamento</p>
+                    <select
+                      className={inputClass}
+                      value={paymentMethod}
+                      onChange={(e) => {
+                        setPaymentMethod(e.target.value);
+                        setValorRecebido("");
+                      }}
+                    >
+                      {PAYMENT_METHODS.map((p) => (
+                        <option key={p.value} value={p.value}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {paymentMethod === "DINHEIRO" && (
+                    <div>
+                      <p className="text-xs font-semibold text-ink-soft mb-1">Valor recebido (opcional)</p>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0,00"
+                        className={inputClass}
+                        value={valorRecebido}
+                        onChange={(e) => setValorRecebido(e.target.value)}
+                      />
+                      {troco != null && (
+                        <p className={`text-sm mt-1 font-mono ${troco < 0 ? "text-red-500" : "text-basil"}`}>
+                          {troco < 0 ? `Falta ${brl(Math.abs(troco))}` : `Troco: ${brl(troco)}`}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-sm text-ink-soft">Total</span>
+                    <span className="font-mono font-semibold text-char text-lg">{brl(total)}</span>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button onClick={() => setShowFechar(false)} className="btn-secondary text-sm flex-1">
+                      Voltar
+                    </button>
+                    <button onClick={fecharComanda} disabled={busy} className="btn-primary text-sm flex-1 disabled:opacity-50">
+                      {busy ? "Fechando..." : "Confirmar"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-ink-soft">Total</span>
+                    <span className="font-mono font-semibold text-char text-xl">{brl(total)}</span>
+                  </div>
+                  <button
+                    onClick={() => setShowFechar(true)}
+                    disabled={busy || comanda.itens.length === 0}
+                    className="btn-primary text-sm w-full disabled:opacity-50"
+                  >
+                    Fechar comanda
+                  </button>
+                </>
               )}
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
+      {/* Montador de pizza */}
       {botaoPizza && (
         <MontadorPizzaModal
           comandaId={comandaId}
@@ -268,12 +380,13 @@ export default function ComandaModal({ comandaId, onClose, onClosed }) {
         />
       )}
 
+      {/* Quantidade de rodízio */}
       {botaoRodizio && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="bg-white rounded-2xl p-5 w-full max-w-xs">
             <p className="text-sm font-semibold text-char mb-3">{botaoRodizio.labelBotao}</p>
             <label className="block mb-4">
-              <span className="block text-xs text-ink-soft mb-1">Quantidade</span>
+              <span className="block text-xs text-ink-soft mb-1">Quantidade de pessoas</span>
               <input
                 type="number"
                 min="1"
@@ -289,6 +402,28 @@ export default function ComandaModal({ comandaId, onClose, onClosed }) {
               </button>
               <button onClick={confirmarRodizio} disabled={busy} className="btn-primary text-sm flex-1 disabled:opacity-50">
                 Adicionar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmação de remoção */}
+      {confirmRemoveId != null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-xs">
+            <p className="text-sm font-semibold text-char mb-1">Remover item?</p>
+            <p className="text-xs text-ink-soft mb-4">Esta ação não pode ser desfeita.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmRemoveId(null)} className="btn-secondary text-sm flex-1">
+                Cancelar
+              </button>
+              <button
+                onClick={() => removeItem(confirmRemoveId)}
+                disabled={busy}
+                className="text-sm flex-1 rounded-full bg-red-500 text-white font-semibold hover:bg-red-600 disabled:opacity-50 px-4 py-2"
+              >
+                Remover
               </button>
             </div>
           </div>

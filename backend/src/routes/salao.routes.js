@@ -136,7 +136,7 @@ router.get("/comandas/:id", requireAuth, requireAnyRole(...SALAO_ROLES), adminRe
 
     const comanda = await prisma.comanda.findFirst({
       where: { id: comandaId, lojaId: req.lojaId },
-      include: { itens: true },
+      include: { itens: { orderBy: { id: "asc" } } },
     });
     if (!comanda) {
       return res.status(404).json({ error: "Comanda não encontrada nesta loja." });
@@ -306,6 +306,49 @@ router.post(
     }
   }
 );
+
+/**
+ * PATCH /api/salao/comandas/:id/itens/:itemId
+ * Altera a quantidade de um item já lançado (comanda aberta). quantidade >= 1.
+ * Preço unitário é imutável (snapshot da venda); só a quantidade muda.
+ */
+router.patch("/comandas/:id/itens/:itemId", requireAuth, requireAnyRole(...SALAO_ROLES), adminWriteLimiter, attachLojaId, async (req, res, next) => {
+  try {
+    const comandaId = parseInt(req.params.id);
+    const itemId = parseInt(req.params.itemId);
+    const quantidade = parseInt(req.body?.quantidade);
+    const ip = req.ip || req.connection.remoteAddress;
+
+    if (isNaN(comandaId) || isNaN(itemId)) {
+      return res.status(400).json({ error: "ID inválido." });
+    }
+    if (isNaN(quantidade) || quantidade < 1) {
+      return res.status(400).json({ error: "Quantidade deve ser um inteiro maior ou igual a 1." });
+    }
+
+    const comanda = await prisma.comanda.findFirst({ where: { id: comandaId, lojaId: req.lojaId } });
+    if (!comanda) {
+      return res.status(404).json({ error: "Comanda não encontrada nesta loja." });
+    }
+    if (comanda.status !== "ABERTA") {
+      return res.status(409).json({ error: "Comanda não está aberta." });
+    }
+
+    const item = await prisma.comandaItem.findFirst({ where: { id: itemId, comandaId } });
+    if (!item) {
+      return res.status(404).json({ error: "Item não encontrado nesta comanda." });
+    }
+
+    await prisma.comandaItem.update({ where: { id: itemId }, data: { quantidade } });
+    const updated = await recalcularTotalComanda(comandaId);
+
+    logSecurityEvent("ALTERAR_QTD_ITEM_COMANDA", { adminId: req.admin.id, comandaId, itemId, quantidade }, ip);
+
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
 
 /**
  * DELETE /api/salao/comandas/:id/itens/:itemId

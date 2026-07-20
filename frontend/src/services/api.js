@@ -79,6 +79,7 @@ export const ordersService = {
   getById: (id) => api.get(`/orders/${id}`).then((r) => r.data),
   updateStatus: (id, status) => api.patch(`/orders/${id}/status`, { status }).then((r) => r.data),
   getTodayReport: () => api.get("/orders/reports/today").then((r) => r.data),
+  getReportSummary: (params) => api.get("/orders/reports/summary", { params }).then((r) => r.data),
   lookupCliente: (phone) => api.get("/orders/cliente/lookup", { params: { phone } }).then((r) => r.data),
 };
 
@@ -88,6 +89,8 @@ export const salaoService = {
   getComanda: (id) => api.get(`/salao/comandas/${id}`).then((r) => r.data),
   addItemProduto: (comandaId, data) => api.post(`/salao/comandas/${comandaId}/itens/produto`, data).then((r) => r.data),
   addItemPizza: (comandaId, data) => api.post(`/salao/comandas/${comandaId}/itens/pizza`, data).then((r) => r.data),
+  updateItemQuantidade: (comandaId, itemId, quantidade) =>
+    api.patch(`/salao/comandas/${comandaId}/itens/${itemId}`, { quantidade }).then((r) => r.data),
   removeItem: (comandaId, itemId) => api.delete(`/salao/comandas/${comandaId}/itens/${itemId}`).then((r) => r.data),
   fecharComanda: (id, paymentMethod) => api.post(`/salao/comandas/${id}/fechar`, { paymentMethod }).then((r) => r.data),
 };

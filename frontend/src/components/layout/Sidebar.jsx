@@ -67,7 +67,7 @@ const NAV_SECTIONS = [
     id: "relatorios",
     label: "Relatórios",
     items: [
-      { to: "/operacao/relatorio", label: "Relatório do dia", icon: BarChart3, roles: GERENCIA_ROLES },
+      { to: "/operacao/relatorio", label: "Relatório gerencial", icon: BarChart3, roles: GERENCIA_ROLES },
     ],
   },
 ];

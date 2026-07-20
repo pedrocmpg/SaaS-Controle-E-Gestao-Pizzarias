@@ -253,6 +253,181 @@ router.get("/reports/today", requireAuth, requireAnyRole("SUPER_ADMIN", "ADMIN",
   }
 });
 
+// Roles com acesso ao relatório gerencial (mesma régua de /reports/today).
+const REPORT_ROLES = ["SUPER_ADMIN", "ADMIN", "GERENTE"];
+
+// Períodos pré-definidos aceitos por /reports/summary. Datas sempre em horário local do servidor.
+function resolveReportRange(query) {
+  const now = new Date();
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const periodo = (query.periodo || "hoje").toString();
+
+  // Intervalo custom: from/to em YYYY-MM-DD (inclusivo nas duas pontas).
+  if (periodo === "custom") {
+    const from = query.from ? new Date(`${query.from}T00:00:00`) : startOfToday;
+    const to = query.to ? new Date(`${query.to}T23:59:59.999`) : now;
+    if (isNaN(from) || isNaN(to) || from > to) return null;
+    return { gte: from, lte: to };
+  }
+
+  const start = new Date(startOfToday);
+  let end = now;
+
+  switch (periodo) {
+    case "hoje":
+      break;
+    case "ontem":
+      start.setDate(start.getDate() - 1);
+      end = new Date(startOfToday.getTime() - 1); // 23:59:59.999 de ontem
+      break;
+    case "7dias":
+      start.setDate(start.getDate() - 6); // hoje + 6 dias atrás = 7 dias
+      break;
+    case "30dias":
+      start.setDate(start.getDate() - 29);
+      break;
+    default:
+      return null;
+  }
+  return { gte: start, lte: end };
+}
+
+// Chave YYYY-MM-DD em horário local (para agrupar faturamento por dia).
+function dayKey(date) {
+  const d = new Date(date);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * GET /api/orders/reports/summary
+ * Relatório gerencial por período. Agrega tele-entrega (Order) + salão (Comanda fechada).
+ * Query: periodo=hoje|ontem|7dias|30dias|custom (+ from/to em YYYY-MM-DD quando custom).
+ * Isolado por loja via resolveLojaId (multi-tenant não-negociável).
+ */
+router.get("/reports/summary", requireAuth, requireAnyRole(...REPORT_ROLES), adminReadLimiter, async (req, res, next) => {
+  try {
+    const ip = req.ip || req.connection.remoteAddress;
+
+    const range = resolveReportRange(req.query);
+    if (!range) {
+      return res.status(400).json({ error: "Período inválido. Use hoje|ontem|7dias|30dias|custom (com from/to)." });
+    }
+
+    const lojaId = await resolveLojaId(req);
+    if (lojaId == null) {
+      return res.status(400).json({ error: "Não foi possível resolver a loja." });
+    }
+
+    // Tele-entrega: pedidos não cancelados no período.
+    const orders = await prisma.order.findMany({
+      where: { lojaId, status: { not: "CANCELADO" }, createdAt: range },
+      select: {
+        totalPrice: true,
+        paymentMethod: true,
+        createdAt: true,
+        items: { select: { itemName: true, quantity: true, subtotal: true } },
+      },
+    });
+
+    // Salão: comandas fechadas no período (fechadaEm dentro do range).
+    const comandas = await prisma.comanda.findMany({
+      where: { lojaId, status: "FECHADA", fechadaEm: range },
+      select: {
+        totalPrice: true,
+        paymentMethod: true,
+        fechadaEm: true,
+        itens: { select: { descricao: true, quantidade: true, unitPrice: true } },
+      },
+    });
+
+    // Normaliza a forma de pagamento para um rótulo estável.
+    const normPagamento = (pm) => (pm ? pm.toString().toUpperCase() : "NAO_INFORMADO");
+
+    const porDia = {}; // dayKey -> receita
+    const porPagamento = {}; // metodo -> receita
+    const rankItens = {}; // nome -> { quantidade, receita }
+
+    let totalPedidos = 0;
+    let totalReceita = 0;
+    let receitaTele = 0;
+    let receitaSalao = 0;
+
+    const acumular = (valor, data, pagamento, itens, mapItem) => {
+      const v = Number(valor);
+      totalPedidos += 1;
+      totalReceita += v;
+      const dk = dayKey(data);
+      porDia[dk] = (porDia[dk] || 0) + v;
+      const pg = normPagamento(pagamento);
+      porPagamento[pg] = (porPagamento[pg] || 0) + v;
+      for (const it of itens) {
+        const { nome, qtd, receita } = mapItem(it);
+        if (!nome) continue;
+        const cur = rankItens[nome] || { quantidade: 0, receita: 0 };
+        cur.quantidade += qtd;
+        cur.receita += receita;
+        rankItens[nome] = cur;
+      }
+    };
+
+    for (const o of orders) {
+      receitaTele += Number(o.totalPrice);
+      acumular(o.totalPrice, o.createdAt, o.paymentMethod, o.items, (it) => ({
+        nome: it.itemName,
+        qtd: it.quantity,
+        receita: Number(it.subtotal),
+      }));
+    }
+    for (const c of comandas) {
+      receitaSalao += Number(c.totalPrice);
+      acumular(c.totalPrice, c.fechadaEm, c.paymentMethod, c.itens, (it) => ({
+        nome: it.descricao,
+        qtd: it.quantidade,
+        receita: Number(it.unitPrice) * it.quantidade,
+      }));
+    }
+
+    const ticketMedio = totalPedidos > 0 ? totalReceita / totalPedidos : 0;
+
+    // Série diária ordenada por data (para o gráfico).
+    const faturamentoPorDia = Object.entries(porDia)
+      .map(([dia, receita]) => ({ dia, receita: Number(receita.toFixed(2)) }))
+      .sort((a, b) => a.dia.localeCompare(b.dia));
+
+    const porFormaPagamento = Object.entries(porPagamento)
+      .map(([metodo, receita]) => ({ metodo, receita: Number(receita.toFixed(2)) }))
+      .sort((a, b) => b.receita - a.receita);
+
+    const topItens = Object.entries(rankItens)
+      .map(([nome, v]) => ({ nome, quantidade: v.quantidade, receita: Number(v.receita.toFixed(2)) }))
+      .sort((a, b) => b.quantidade - a.quantidade)
+      .slice(0, 10);
+
+    logSecurityEvent("VIEW_REPORT_SUMMARY", { adminId: req.admin.id, periodo: req.query.periodo || "hoje" }, ip);
+
+    res.json({
+      periodo: req.query.periodo || "hoje",
+      totalPedidos,
+      totalReceita: Number(totalReceita.toFixed(2)),
+      ticketMedio: Number(ticketMedio.toFixed(2)),
+      porCanal: {
+        teleEntrega: Number(receitaTele.toFixed(2)),
+        salao: Number(receitaSalao.toFixed(2)),
+      },
+      porFormaPagamento,
+      faturamentoPorDia,
+      topItens,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 /**
  * GET /api/orders/:id
  * Consulta um pedido específico. Protegida.
