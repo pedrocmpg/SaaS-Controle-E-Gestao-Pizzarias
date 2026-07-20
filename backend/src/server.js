@@ -24,6 +24,7 @@ const settingsRoutes = require("./routes/settings.routes");
 const auditRoutes = require("./routes/audit.routes");
 const salaoRoutes = require("./routes/salao.routes");
 const caixaRoutes = require("./routes/caixa.routes");
+const pdvConfigRoutes = require("./routes/pdvConfig.routes");
 const motoboyRoutes = require("./routes/motoboy.routes");
 const ofertasRoutes = require("./routes/ofertas.routes");
 const errorHandler = require("./middleware/errorHandler");
@@ -88,6 +89,7 @@ app.use("/api/settings", settingsRoutes);
 app.use("/api/audit", auditRoutes);
 app.use("/api/salao", salaoRoutes);
 app.use("/api/caixa", caixaRoutes);
+app.use("/api/pdv-config", pdvConfigRoutes);
 app.use("/api/motoboy", motoboyRoutes);
 app.use("/api/ofertas", ofertasRoutes);
 

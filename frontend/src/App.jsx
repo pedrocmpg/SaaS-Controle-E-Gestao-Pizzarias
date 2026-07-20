@@ -17,6 +17,7 @@ import CadastroSabores from "./pages/admin/CadastroSabores";
 import CadastroTamanhosBordas from "./pages/admin/CadastroTamanhosBordas";
 import CadastroOfertas from "./pages/admin/CadastroOfertas";
 import CadastroMotoboys from "./pages/admin/CadastroMotoboys";
+import CadastroGradePDV from "./pages/admin/CadastroGradePDV";
 import AppShell from "./components/layout/AppShell";
 import OperacaoPedidos from "./pages/operacao/OperacaoPedidos";
 import OperacaoRelatorio from "./pages/operacao/OperacaoRelatorio";
@@ -95,6 +96,14 @@ export default function App() {
             element={
               <AdminRoute allowedRoles={GERENCIA_ROLES}>
                 <CadastroOfertas />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="admin/grade-pdv"
+            element={
+              <AdminRoute allowedRoles={GERENCIA_ROLES}>
+                <CadastroGradePDV />
               </AdminRoute>
             }
           />

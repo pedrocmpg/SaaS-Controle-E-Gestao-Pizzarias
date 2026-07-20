@@ -166,6 +166,9 @@ router.delete("/sizes/:id", requireAuth, requireAnyRole(...CATALOG_WRITE_ROLES),
 
     res.status(204).send();
   } catch (err) {
+    if (err.code === "P2003") {
+      return res.status(409).json({ error: "Este tamanho está em uso em um botão da grade PDV. Desative-o em vez de excluir." });
+    }
     next(err);
   }
 });
@@ -267,6 +270,9 @@ router.delete("/flavors/:id", requireAuth, requireAnyRole(...CATALOG_WRITE_ROLES
 
     res.status(204).send();
   } catch (err) {
+    if (err.code === "P2003") {
+      return res.status(409).json({ error: "Este sabor está em uso em uma comanda ou botão. Desative-o em vez de excluir." });
+    }
     next(err);
   }
 });
@@ -465,6 +471,9 @@ router.delete("/products/:id", requireAuth, requireAnyRole(...CATALOG_WRITE_ROLE
 
     res.status(204).send();
   } catch (err) {
+    if (err.code === "P2003") {
+      return res.status(409).json({ error: "Este produto está em uso em um botão da grade PDV. Desative-o em vez de excluir." });
+    }
     next(err);
   }
 });

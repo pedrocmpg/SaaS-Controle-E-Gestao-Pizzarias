@@ -83,14 +83,28 @@ export const ordersService = {
 };
 
 export const salaoService = {
-  getMesas: () => api.get("/salao/mesas").then((r) => r.data),
-  abrirMesa: (numero) => api.post(`/salao/mesas/${numero}/abrir`).then((r) => r.data),
+  listComandas: (params) => api.get("/salao/comandas", { params }).then((r) => r.data),
+  abrirComanda: (numeroMesa) => api.post("/salao/comandas/abrir", numeroMesa != null ? { numeroMesa } : {}).then((r) => r.data),
   getComanda: (id) => api.get(`/salao/comandas/${id}`).then((r) => r.data),
-  addItem: (comandaId, item) => api.post(`/salao/comandas/${comandaId}/itens`, item).then((r) => r.data),
+  addItemProduto: (comandaId, data) => api.post(`/salao/comandas/${comandaId}/itens/produto`, data).then((r) => r.data),
+  addItemPizza: (comandaId, data) => api.post(`/salao/comandas/${comandaId}/itens/pizza`, data).then((r) => r.data),
   removeItem: (comandaId, itemId) => api.delete(`/salao/comandas/${comandaId}/itens/${itemId}`).then((r) => r.data),
   fecharComanda: (id, paymentMethod) => api.post(`/salao/comandas/${id}/fechar`, { paymentMethod }).then((r) => r.data),
-  getRodizioPrecos: () => api.get("/salao/rodizio/precos").then((r) => r.data),
-  patchRodizioPreco: (faixa, data) => api.put(`/salao/rodizio/precos/${faixa}`, data).then((r) => r.data),
+};
+
+export const pdvConfigService = {
+  getLojaConfig: () => api.get("/pdv-config/loja-config").then((r) => r.data),
+  updateLojaConfig: (data) => api.put("/pdv-config/loja-config", data).then((r) => r.data),
+  getGrupos: () => api.get("/pdv-config/grupos").then((r) => r.data),
+  createGrupo: (data) => api.post("/pdv-config/grupos", data).then((r) => r.data),
+  updateGrupo: (id, data) => api.put(`/pdv-config/grupos/${id}`, data).then((r) => r.data),
+  deleteGrupo: (id) => api.delete(`/pdv-config/grupos/${id}`).then((r) => r.data),
+  reordenarGrupos: (items) => api.put("/pdv-config/grupos/reordenar", { items }).then((r) => r.data),
+  getBotoes: (grupoId) => api.get("/pdv-config/botoes", { params: grupoId ? { grupoId } : {} }).then((r) => r.data),
+  createBotao: (data) => api.post("/pdv-config/botoes", data).then((r) => r.data),
+  updateBotao: (id, data) => api.put(`/pdv-config/botoes/${id}`, data).then((r) => r.data),
+  deleteBotao: (id) => api.delete(`/pdv-config/botoes/${id}`).then((r) => r.data),
+  reordenarBotoes: (items) => api.put("/pdv-config/botoes/reordenar", { items }).then((r) => r.data),
 };
 
 export const caixaService = {

@@ -1,47 +1,58 @@
 import { useCallback, useEffect, useState } from "react";
-import { salaoService } from "../../services/api";
+import { salaoService, pdvConfigService } from "../../services/api";
 import ComandaModal from "./ComandaModal";
 
-const STATUS_LABEL = { LIVRE: "Livre", OCUPADA: "Ocupada" };
-
 export default function OperacaoSalao() {
-  const [mesas, setMesas] = useState([]);
+  const [config, setConfig] = useState(null);
+  const [comandas, setComandas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [comandaId, setComandaId] = useState(null);
+  const [numeroInput, setNumeroInput] = useState("");
+  const [abrindo, setAbrindo] = useState(false);
 
-  const loadMesas = useCallback(() => {
+  const load = useCallback(() => {
     setLoading(true);
-    salaoService
-      .getMesas()
-      .then(setMesas)
-      .catch(() => setError("Não foi possível carregar as mesas."))
+    Promise.all([pdvConfigService.getLojaConfig().then(setConfig), salaoService.listComandas({ status: "ABERTA" }).then(setComandas)])
+      .catch(() => setError("Não foi possível carregar as comandas."))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
-    loadMesas();
-  }, [loadMesas]);
+    load();
+  }, [load]);
 
-  async function handleMesaClick(mesa) {
+  async function abrirComanda(numeroMesa) {
     setError(null);
-    if (mesa.status === "OCUPADA") {
-      if (mesa.comandaAberta) setComandaId(mesa.comandaAberta.id);
+    setAbrindo(true);
+    try {
+      const comanda = await salaoService.abrirComanda(numeroMesa);
+      setNumeroInput("");
+      setComandaId(comanda.id);
+      load();
+    } catch (err) {
+      setError(err.response?.data?.error || "Não foi possível abrir a comanda.");
+    } finally {
+      setAbrindo(false);
+    }
+  }
+
+  function handleAbrirComMesa(e) {
+    e.preventDefault();
+    const numero = parseInt(numeroInput);
+    if (isNaN(numero) || numero <= 0) {
+      setError("Informe um número de mesa válido.");
       return;
     }
-    try {
-      const comanda = await salaoService.abrirMesa(mesa.numero);
-      setComandaId(comanda.id);
-      loadMesas();
-    } catch (err) {
-      setError(err.response?.data?.error || "Não foi possível abrir a mesa.");
-    }
+    abrirComanda(numero);
   }
 
   function handleComandaClosed() {
     setComandaId(null);
-    loadMesas();
+    load();
   }
+
+  const usaMesa = config?.usaMesa ?? true;
 
   return (
     <div>
@@ -53,32 +64,51 @@ export default function OperacaoSalao() {
         </p>
       )}
 
+      {!loading && (
+        <div className="card p-4 mb-6">
+          {usaMesa ? (
+            <form onSubmit={handleAbrirComMesa} className="flex items-end gap-3">
+              <label className="text-sm">
+                <span className="block text-ink-soft mb-1">Número da mesa</span>
+                <input
+                  type="number"
+                  min="1"
+                  className="border border-flour-2 rounded-lg px-3 py-2 text-sm w-32"
+                  value={numeroInput}
+                  onChange={(e) => setNumeroInput(e.target.value)}
+                />
+              </label>
+              <button type="submit" disabled={abrindo} className="btn-primary text-sm disabled:opacity-50">
+                Abrir mesa
+              </button>
+            </form>
+          ) : (
+            <button onClick={() => abrirComanda(null)} disabled={abrindo} className="btn-primary text-sm disabled:opacity-50">
+              Abrir comanda
+            </button>
+          )}
+        </div>
+      )}
+
       {loading ? (
-        <p className="text-ink-soft text-sm">Carregando mesas...</p>
+        <p className="text-ink-soft text-sm">Carregando comandas...</p>
+      ) : comandas.length === 0 ? (
+        <p className="text-ink-soft text-sm">Nenhuma comanda aberta.</p>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4">
-          {mesas.map((mesa) => {
-            const ocupada = mesa.status === "OCUPADA";
-            return (
-              <button
-                key={mesa.id}
-                onClick={() => handleMesaClick(mesa)}
-                className={`card p-5 text-left transition hover:shadow-md ${
-                  ocupada ? "border-ember-500/40 bg-ember-500/5" : ""
-                }`}
-              >
-                <p className="text-2xl font-display font-semibold text-char">Mesa {mesa.numero}</p>
-                <p className={`text-xs font-semibold mt-1 ${ocupada ? "text-ember-600" : "text-basil"}`}>
-                  {STATUS_LABEL[mesa.status]}
-                </p>
-                {ocupada && mesa.comandaAberta && (
-                  <p className="text-sm font-mono text-ink-soft mt-2">
-                    R$ {Number(mesa.comandaAberta.totalPrice).toFixed(2)}
-                  </p>
-                )}
-              </button>
-            );
-          })}
+          {comandas.map((comanda) => (
+            <button
+              key={comanda.id}
+              onClick={() => setComandaId(comanda.id)}
+              className="card p-5 text-left transition hover:shadow-md border-ember-500/40 bg-ember-500/5"
+            >
+              <p className="text-2xl font-display font-semibold text-char">
+                {comanda.numeroMesa != null ? `Mesa ${comanda.numeroMesa}` : "Balcão"}
+              </p>
+              <p className="text-xs font-semibold mt-1 text-ember-600">Aberta</p>
+              <p className="text-sm font-mono text-ink-soft mt-2">R$ {Number(comanda.totalPrice).toFixed(2)}</p>
+            </button>
+          ))}
         </div>
       )}
 

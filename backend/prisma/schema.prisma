@@ -20,6 +20,8 @@ enum ProductCategory {
   COMBO
   BEBIDA
   ESPECIAL
+  EXTRA
+  RODIZIO
 }
 
 enum DeliveryType {
@@ -44,26 +46,19 @@ enum OrigemPedido {
   BALCAO
 }
 
-enum StatusMesa {
-  LIVRE
-  OCUPADA
-}
-
 enum StatusComanda {
   ABERTA
   FECHADA
   CANCELADA
 }
 
-/// Faixas de cobrança do rodízio (preço fixo por pessoa, com variação por faixa)
-enum FaixaRodizio {
-  ADULTO
-  CRIANCA
-  MEIA
+enum ModoAdicionalSabor {
+  CHEIO
+  // PROPORCIONAL — reservado para fase futura, cálculo não implementado ainda
 }
 
-enum ComandaItemTipo {
-  RODIZIO
+enum TipoBotaoPDV {
+  PIZZA
   PRODUTO
 }
 
@@ -99,29 +94,36 @@ enum TipoExtraMotoboy {
 }
 
 /// Tamanhos de pizza "Monte a sua" (Pequena, Média, Grande)
+/// maxFlavors é o "máx. de sabores simultâneos" configurável por tamanho (mesmo
+/// conceito que o spec do PDV em grade chama de maxSabores — reaproveitado).
 model PizzaSize {
-  id           Int      @id @default(autoincrement())
-  lojaId       Int
-  loja         Loja     @relation(fields: [lojaId], references: [id])
-  name         String
-  slug         String
-  slices       Int
-  maxFlavors   Int
-  servesPeople Int
-  price        Decimal  @db.Decimal(10, 2)
-  imageUrl     String?
-  description  String?
-  active       Boolean  @default(true)
-  order        Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            Int      @id @default(autoincrement())
+  lojaId        Int
+  loja          Loja     @relation(fields: [lojaId], references: [id])
+  name          String
+  slug          String
+  slices        Int
+  maxFlavors    Int
+  servesPeople  Int
+  price         Decimal  @db.Decimal(10, 2)
+  precoDelivery Decimal? @db.Decimal(10, 2)
+  codigo        String?
+  imageUrl      String?
+  description   String?
+  active        Boolean  @default(true)
+  order         Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  botoesPdv BotaoPDV[]
 
   @@unique([lojaId, slug])
   @@index([lojaId])
   @@map("pizza_sizes")
 }
 
-/// Sabores disponíveis (salgados e doces)
+/// Sabores disponíveis (salgados e doces). extraPrice é o "adicional" somado
+/// ao preço da pizza quando o sabor é escolhido (mesmo conceito do spec do PDV).
 model Flavor {
   id          Int        @id @default(autoincrement())
   lojaId      Int
@@ -130,6 +132,7 @@ model Flavor {
   description String?
   type        FlavorType
   extraPrice  Decimal    @default(0) @db.Decimal(10, 2)
+  codigo      String?
   imageUrl    String?
   active      Boolean    @default(true)
   order       Int        @default(0)
@@ -155,23 +158,27 @@ model Border {
   @@map("borders")
 }
 
-/// Produtos fixos: combos, pizza vulcão, bebidas etc (não configuráveis)
+/// Produtos fixos: combos, pizza vulcão, bebidas, extras e rodízio (por produto,
+/// configurados na grade do PDV via BotaoPDV).
 model Product {
-  id           Int             @id @default(autoincrement())
-  lojaId       Int
-  loja         Loja            @relation(fields: [lojaId], references: [id])
-  name         String
-  description  String?
-  price        Decimal         @db.Decimal(10, 2)
-  servesPeople Int?
-  imageUrl     String?
-  category     ProductCategory
-  active       Boolean         @default(true)
-  order        Int             @default(0)
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  comandaItens ComandaItem[]
-  ofertas      OfertaProduto[]
+  id            Int             @id @default(autoincrement())
+  lojaId        Int
+  loja          Loja            @relation(fields: [lojaId], references: [id])
+  name          String
+  description   String?
+  price         Decimal         @db.Decimal(10, 2)
+  precoDelivery Decimal?        @db.Decimal(10, 2)
+  codigo        String?
+  servesPeople  Int?
+  imageUrl      String?
+  category      ProductCategory
+  active        Boolean         @default(true)
+  order         Int             @default(0)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  ofertas       OfertaProduto[]
+
+  botoesPdv BotaoPDV[]
 
   @@index([lojaId])
   @@map("products")
@@ -272,46 +279,16 @@ model Cliente {
   @@map("clientes")
 }
 
-/// Mesa numerada do salão (sem mapa visual, só número + status)
-model Mesa {
-  id        Int        @id @default(autoincrement())
-  lojaId    Int
-  loja      Loja       @relation(fields: [lojaId], references: [id])
-  numero    Int
-  status    StatusMesa @default(LIVRE)
-  comandas  Comanda[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-
-  @@unique([lojaId, numero])
-  @@index([lojaId])
-  @@map("mesas")
-}
-
-/// Preço do rodízio por faixa (adulto/criança/meia), configurável por loja
-model RodizioPreco {
-  id        Int          @id @default(autoincrement())
-  lojaId    Int
-  loja      Loja         @relation(fields: [lojaId], references: [id])
-  faixa     FaixaRodizio
-  preco     Decimal      @db.Decimal(10, 2)
-  active    Boolean      @default(true)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
-
-  @@unique([lojaId, faixa])
-  @@index([lojaId])
-  @@map("rodizio_precos")
-}
-
-/// Comanda de mesa do salão (rodízio + bebidas). Fluxo separado da tele-entrega.
+/// Comanda de mesa/balcão do salão (grade configurável de grupos/botões).
+/// Fluxo separado da tele-entrega. numeroMesa é um campo solto (sem FK) —
+/// null quando LojaConfig.usaMesa=false (venda de balcão/avulsa).
 model Comanda {
-  id     Int           @id @default(autoincrement())
+  id     Int  @id @default(autoincrement())
   lojaId Int
-  loja   Loja          @relation(fields: [lojaId], references: [id])
-  mesaId Int
-  mesa   Mesa          @relation(fields: [mesaId], references: [id])
-  status StatusComanda @default(ABERTA)
+  loja   Loja @relation(fields: [lojaId], references: [id])
+
+  numeroMesa Int?
+  status     StatusComanda @default(ABERTA)
 
   abertaEm  DateTime  @default(now())
   fechadaEm DateTime?
@@ -332,32 +309,100 @@ model Comanda {
   itens ComandaItem[]
 
   @@index([lojaId])
-  @@index([mesaId])
+  @@index([lojaId, status])
   @@index([caixaSessaoId])
   @@map("comandas")
 }
 
-/// Item de uma comanda de salão: rodízio (por faixa) ou produto (bebida/combo)
+/// Item de uma comanda: PIZZA (montador, com snapshot de sabores/borda) ou
+/// PRODUTO (bebida/extra/rodízio, lançado direto a partir de um BotaoPDV).
 model ComandaItem {
-  id        Int             @id @default(autoincrement())
+  id        Int          @id @default(autoincrement())
   comandaId Int
-  comanda   Comanda         @relation(fields: [comandaId], references: [id], onDelete: Cascade)
-  tipo      ComandaItemTipo
+  comanda   Comanda      @relation(fields: [comandaId], references: [id], onDelete: Cascade)
+  tipo      TipoBotaoPDV
 
-  // Só quando tipo = RODIZIO
-  faixaRodizio FaixaRodizio?
+  descricao  String // snapshot do nome/tamanho no momento da venda
+  unitPrice  Decimal @db.Decimal(10, 2)
+  quantidade Int     @default(1)
 
-  // Só quando tipo = PRODUTO
-  productId Int?
-  product   Product? @relation(fields: [productId], references: [id])
+  // Só quando tipo = PIZZA: snapshot dos sabores (e borda) escolhidos, ex
+  // [{ "nome": "Calabresa", "adicional": 5.00 }, ...]
+  sabroesSnapshot Json?
 
-  descricao String // snapshot do nome/faixa no momento da venda
-  quantity  Int      @default(1)
-  unitPrice Decimal  @db.Decimal(10, 2)
-  createdAt DateTime @default(now())
+  criadoEm DateTime @default(now())
 
   @@index([comandaId])
   @@map("comanda_items")
+}
+
+/// Configuração do módulo PDV/Salão em grade, 1:1 por loja.
+model LojaConfig {
+  id     Int  @id @default(autoincrement())
+  lojaId Int  @unique
+  loja   Loja @relation(fields: [lojaId], references: [id])
+
+  modoAdicionalSabor ModoAdicionalSabor @default(CHEIO)
+  usaBorda           Boolean            @default(false)
+  usaMesa            Boolean            @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("loja_configs")
+}
+
+/// Grupo de botões da grade do PDV (ex "PIZZAS", "REFRIGERANTES"). 100%
+/// configurável por loja — o sistema nasce vazio, sem seed.
+model GrupoPDV {
+  id     Int  @id @default(autoincrement())
+  lojaId Int
+  loja   Loja @relation(fields: [lojaId], references: [id])
+
+  nome     String
+  cor      String?
+  corFonte String?
+  posicao  Int
+  ativo    Boolean @default(true)
+
+  botoes BotaoPDV[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([lojaId])
+  @@index([lojaId, ativo])
+  @@map("grupos_pdv")
+}
+
+/// Botão individual dentro de um GrupoPDV: aponta pra PizzaSize (abre o
+/// montador de sabores) ou Product (lança direto na comanda) — nunca ambos.
+model BotaoPDV {
+  id      Int      @id @default(autoincrement())
+  lojaId  Int
+  loja    Loja     @relation(fields: [lojaId], references: [id])
+  grupoId Int
+  grupo   GrupoPDV @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+
+  posicao    Int
+  labelBotao String
+  cor        String?
+
+  tipo        TipoBotaoPDV
+  pizzaSizeId Int?
+  pizzaSize   PizzaSize?   @relation(fields: [pizzaSizeId], references: [id], onDelete: Restrict)
+  productId   Int?
+  product     Product?     @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  ativo Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([lojaId])
+  @@index([grupoId])
+  @@index([grupoId, ativo])
+  @@map("botoes_pdv")
 }
 
 /// Sessão de caixa por turno (salão e tele-entrega são fundos separados)
@@ -608,12 +653,13 @@ model Loja {
   flavors       Flavor[]
   borders       Border[]
   products      Product[]
-  mesas         Mesa[]
-  rodizioPrecos RodizioPreco[]
   comandas      Comanda[]
   caixaSessoes  CaixaSessao[]
   turnosMotoboy TurnoMotoboy[]
   ofertas       Oferta[]
+  lojaConfig    LojaConfig?
+  gruposPdv     GrupoPDV[]
+  botoesPdv     BotaoPDV[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 

@@ -4,19 +4,21 @@ const { requireAuth } = require("../middleware/auth");
 const { requireAnyRole } = require("../middleware/authorization");
 const { adminReadLimiter, adminWriteLimiter } = require("../middleware/rateLimiter");
 const validateRequest = require("../middleware/validateRequest");
-const { adicionarItemComandaSchema, fecharComandaSchema } = require("../validators/schemas");
+const {
+  abrirComandaSchema,
+  adicionarItemProdutoSchema,
+  adicionarItemPizzaSchema,
+  fecharComandaSchema,
+} = require("../validators/schemas");
 const { logSecurityEvent } = require("../lib/securityLogger");
 const { logAuditChange } = require("../middleware/auditLogger");
 const { resolveLojaId } = require("../lib/lojaScope");
+const { calcularPrecoPizza } = require("../lib/pdvPricing");
 
 const router = express.Router();
 
-// Roles que podem operar o salão (mesas/comandas) — mesmo padrão de ORDER_ROLES.
+// Roles que podem operar o salão (comandas) — mesmo padrão de ORDER_ROLES.
 const SALAO_ROLES = ["SUPER_ADMIN", "ADMIN", "GERENTE", "ATENDENTE"];
-// Preço do rodízio por faixa é catálogo, mesmas roles de escrita do cardápio.
-const RODIZIO_WRITE_ROLES = ["SUPER_ADMIN", "ADMIN", "GERENTE"];
-
-const FAIXA_LABEL = { ADULTO: "Adulto", CRIANCA: "Criança", MEIA: "Meia" };
 
 /**
  * Middleware: resolve e anexa o lojaId efetivo do operador (isolamento multi-tenant).
@@ -38,79 +40,89 @@ async function attachLojaId(req, res, next) {
  */
 async function recalcularTotalComanda(comandaId) {
   const itens = await prisma.comandaItem.findMany({ where: { comandaId } });
-  const total = itens.reduce((sum, i) => sum + Number(i.unitPrice) * i.quantity, 0);
+  const total = itens.reduce((sum, i) => sum + Number(i.unitPrice) * i.quantidade, 0);
   return prisma.comanda.update({ where: { id: comandaId }, data: { totalPrice: total } });
 }
 
-// ---------- Mesas ----------
+// ---------- Comandas ----------
 
 /**
- * GET /api/salao/mesas
- * Lista as mesas da loja com status e resumo da comanda aberta (se ocupada).
+ * GET /api/salao/comandas?status=ABERTA
  */
-router.get("/mesas", requireAuth, requireAnyRole(...SALAO_ROLES), adminReadLimiter, attachLojaId, async (req, res, next) => {
+router.get("/comandas", requireAuth, requireAnyRole(...SALAO_ROLES), adminReadLimiter, attachLojaId, async (req, res, next) => {
   try {
-    const mesas = await prisma.mesa.findMany({
-      where: { lojaId: req.lojaId },
-      orderBy: { numero: "asc" },
-      include: {
-        comandas: {
-          where: { status: "ABERTA" },
-          select: { id: true, totalPrice: true, abertaEm: true },
-        },
-      },
-    });
-    res.json(mesas.map((m) => ({ ...m, comandaAberta: m.comandas[0] || null, comandas: undefined })));
-  } catch (err) {
-    next(err);
-  }
-});
-
-/**
- * POST /api/salao/mesas/:numero/abrir
- * Abre uma comanda para a mesa (mesa precisa estar LIVRE). 409 se já ocupada.
- */
-router.post("/mesas/:numero/abrir", requireAuth, requireAnyRole(...SALAO_ROLES), adminWriteLimiter, attachLojaId, async (req, res, next) => {
-  try {
-    const numero = parseInt(req.params.numero);
-    const ip = req.ip || req.connection.remoteAddress;
-
-    if (isNaN(numero)) {
-      return res.status(400).json({ error: "Número de mesa inválido." });
+    const status = req.query.status ? String(req.query.status).toUpperCase() : undefined;
+    if (status && !["ABERTA", "FECHADA", "CANCELADA"].includes(status)) {
+      return res.status(400).json({ error: "Status inválido." });
     }
 
-    const mesa = await prisma.mesa.findUnique({ where: { lojaId_numero: { lojaId: req.lojaId, numero } } });
-    if (!mesa) {
-      return res.status(404).json({ error: "Mesa não encontrada nesta loja." });
-    }
-
-    // Atualização condicional: evita duas comandas simultâneas na mesma mesa numa corrida.
-    const { count } = await prisma.mesa.updateMany({
-      where: { id: mesa.id, status: "LIVRE" },
-      data: { status: "OCUPADA" },
-    });
-    if (count === 0) {
-      return res.status(409).json({ error: "Mesa já está ocupada." });
-    }
-
-    const comanda = await prisma.comanda.create({
-      data: {
-        lojaId: req.lojaId,
-        mesaId: mesa.id,
-        atendenteAberturaId: req.admin.id,
-      },
+    const comandas = await prisma.comanda.findMany({
+      where: { lojaId: req.lojaId, ...(status ? { status } : {}) },
+      orderBy: { abertaEm: "desc" },
       include: { itens: true },
     });
-
-    logSecurityEvent("ABRIR_MESA", { adminId: req.admin.id, mesaId: mesa.id, comandaId: comanda.id }, ip);
-
-    res.status(201).json(comanda);
+    res.json(comandas);
   } catch (err) {
     next(err);
   }
 });
 
-// ---------- Comandas ----------
+/**
+ * POST /api/salao/comandas/abrir
+ * Body: { numeroMesa? }. Obrigatório se LojaConfig.usaMesa=true. 409 se já houver
+ * comanda ABERTA nesse número (substitui a antiga trava de Mesa.status).
+ */
+router.post(
+  "/comandas/abrir",
+  requireAuth,
+  requireAnyRole(...SALAO_ROLES),
+  adminWriteLimiter,
+  attachLojaId,
+  validateRequest(abrirComandaSchema),
+  async (req, res, next) => {
+    try {
+      const { numeroMesa } = req.body;
+      const ip = req.ip || req.connection.remoteAddress;
+
+      const lojaConfig = await prisma.lojaConfig.upsert({
+        where: { lojaId: req.lojaId },
+        update: {},
+        create: { lojaId: req.lojaId },
+      });
+
+      if (lojaConfig.usaMesa && numeroMesa == null) {
+        return res.status(400).json({ error: "Número da mesa é obrigatório." });
+      }
+      if (!lojaConfig.usaMesa && numeroMesa != null) {
+        return res.status(400).json({ error: "Esta loja não usa numeração de mesa." });
+      }
+
+      if (numeroMesa != null) {
+        const existente = await prisma.comanda.findFirst({
+          where: { lojaId: req.lojaId, numeroMesa, status: "ABERTA" },
+        });
+        if (existente) {
+          return res.status(409).json({ error: "Já existe uma comanda aberta nesta mesa." });
+        }
+      }
+
+      const comanda = await prisma.comanda.create({
+        data: {
+          lojaId: req.lojaId,
+          numeroMesa: numeroMesa ?? null,
+          atendenteAberturaId: req.admin.id,
+        },
+        include: { itens: true },
+      });
+
+      logSecurityEvent("ABRIR_COMANDA", { adminId: req.admin.id, comandaId: comanda.id, numeroMesa }, ip);
+
+      res.status(201).json(comanda);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 /**
  * GET /api/salao/comandas/:id
@@ -124,7 +136,7 @@ router.get("/comandas/:id", requireAuth, requireAnyRole(...SALAO_ROLES), adminRe
 
     const comanda = await prisma.comanda.findFirst({
       where: { id: comandaId, lojaId: req.lojaId },
-      include: { itens: true, mesa: true },
+      include: { itens: true },
     });
     if (!comanda) {
       return res.status(404).json({ error: "Comanda não encontrada nesta loja." });
@@ -137,20 +149,20 @@ router.get("/comandas/:id", requireAuth, requireAnyRole(...SALAO_ROLES), adminRe
 });
 
 /**
- * POST /api/salao/comandas/:id/itens
- * Adiciona item de rodízio (por faixa) ou produto/bebida à comanda.
+ * POST /api/salao/comandas/:id/itens/produto
+ * Lança um item PRODUTO (bebida/extra/rodízio) a partir de um BotaoPDV tipo=PRODUTO.
  */
 router.post(
-  "/comandas/:id/itens",
+  "/comandas/:id/itens/produto",
   requireAuth,
   requireAnyRole(...SALAO_ROLES),
   adminWriteLimiter,
   attachLojaId,
-  validateRequest(adicionarItemComandaSchema),
+  validateRequest(adicionarItemProdutoSchema),
   async (req, res, next) => {
     try {
       const comandaId = parseInt(req.params.id);
-      const { tipo, faixaRodizio, productId, quantity } = req.body;
+      const { botaoId, quantidade } = req.body;
       const ip = req.ip || req.connection.remoteAddress;
 
       if (isNaN(comandaId)) {
@@ -165,42 +177,128 @@ router.post(
         return res.status(409).json({ error: "Comanda não está aberta." });
       }
 
-      let descricao;
-      let unitPrice;
-
-      if (tipo === "RODIZIO") {
-        const precoRodizio = await prisma.rodizioPreco.findUnique({
-          where: { lojaId_faixa: { lojaId: req.lojaId, faixa: faixaRodizio } },
-        });
-        if (!precoRodizio || !precoRodizio.active) {
-          return res.status(400).json({ error: "Preço de rodízio não cadastrado para esta faixa." });
-        }
-        descricao = `Rodízio - ${FAIXA_LABEL[faixaRodizio]}`;
-        unitPrice = precoRodizio.preco;
-      } else {
-        const product = await prisma.product.findFirst({ where: { id: productId, lojaId: req.lojaId } });
-        if (!product) {
-          return res.status(404).json({ error: "Produto não encontrado nesta loja." });
-        }
-        descricao = product.name;
-        unitPrice = product.price;
+      const botao = await prisma.botaoPDV.findFirst({
+        where: { id: botaoId, lojaId: req.lojaId, tipo: "PRODUTO", ativo: true },
+        include: { product: true },
+      });
+      if (!botao || !botao.product) {
+        return res.status(404).json({ error: "Botão não encontrado ou não é do tipo PRODUTO." });
       }
 
       await prisma.comandaItem.create({
         data: {
           comandaId,
-          tipo,
-          faixaRodizio: tipo === "RODIZIO" ? faixaRodizio : null,
-          productId: tipo === "PRODUTO" ? productId : null,
-          descricao,
-          quantity,
-          unitPrice,
+          tipo: "PRODUTO",
+          descricao: botao.product.name,
+          unitPrice: botao.product.price,
+          quantidade,
         },
       });
 
       const updated = await recalcularTotalComanda(comandaId);
 
-      logSecurityEvent("ADICIONAR_ITEM_COMANDA", { adminId: req.admin.id, comandaId, tipo }, ip);
+      logSecurityEvent("ADICIONAR_ITEM_PRODUTO_COMANDA", { adminId: req.admin.id, comandaId, botaoId }, ip);
+
+      res.status(201).json(updated);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/salao/comandas/:id/itens/pizza
+ * Lança um item PIZZA (montador) a partir de um BotaoPDV tipo=PIZZA. Respeita
+ * PizzaSize.maxFlavors e LojaConfig.usaBorda; preço via calcularPrecoPizza.
+ */
+router.post(
+  "/comandas/:id/itens/pizza",
+  requireAuth,
+  requireAnyRole(...SALAO_ROLES),
+  adminWriteLimiter,
+  attachLojaId,
+  validateRequest(adicionarItemPizzaSchema),
+  async (req, res, next) => {
+    try {
+      const comandaId = parseInt(req.params.id);
+      const { botaoId, sabores, borderId, quantidade } = req.body;
+      const ip = req.ip || req.connection.remoteAddress;
+
+      if (isNaN(comandaId)) {
+        return res.status(400).json({ error: "ID inválido." });
+      }
+
+      const comanda = await prisma.comanda.findFirst({ where: { id: comandaId, lojaId: req.lojaId } });
+      if (!comanda) {
+        return res.status(404).json({ error: "Comanda não encontrada nesta loja." });
+      }
+      if (comanda.status !== "ABERTA") {
+        return res.status(409).json({ error: "Comanda não está aberta." });
+      }
+
+      const botao = await prisma.botaoPDV.findFirst({
+        where: { id: botaoId, lojaId: req.lojaId, tipo: "PIZZA", ativo: true },
+        include: { pizzaSize: true },
+      });
+      if (!botao || !botao.pizzaSize) {
+        return res.status(404).json({ error: "Botão não encontrado ou não é do tipo PIZZA." });
+      }
+
+      const pizzaSize = botao.pizzaSize;
+      if (sabores.length > pizzaSize.maxFlavors) {
+        return res.status(400).json({ error: `Máximo de ${pizzaSize.maxFlavors} sabor(es) para este tamanho.` });
+      }
+
+      const flavors = await prisma.flavor.findMany({
+        where: { id: { in: sabores }, lojaId: req.lojaId, active: true },
+      });
+      if (flavors.length !== sabores.length) {
+        return res.status(400).json({ error: "Um ou mais sabores não encontrados nesta loja." });
+      }
+
+      const lojaConfig = await prisma.lojaConfig.upsert({
+        where: { lojaId: req.lojaId },
+        update: {},
+        create: { lojaId: req.lojaId },
+      });
+
+      let border = null;
+      if (borderId != null) {
+        if (!lojaConfig.usaBorda) {
+          return res.status(400).json({ error: "Esta loja não usa borda." });
+        }
+        border = await prisma.border.findFirst({ where: { id: borderId, lojaId: req.lojaId, active: true } });
+        if (!border) {
+          return res.status(404).json({ error: "Borda não encontrada nesta loja." });
+        }
+      }
+
+      const unitPrice = calcularPrecoPizza({
+        pizzaSize,
+        flavors,
+        border,
+        modoAdicionalSabor: lojaConfig.modoAdicionalSabor,
+      });
+
+      const sabroesSnapshot = flavors.map((f) => ({ nome: f.name, adicional: Number(f.extraPrice) }));
+      if (border) {
+        sabroesSnapshot.push({ nome: `Borda: ${border.name}`, adicional: Number(border.price) });
+      }
+
+      await prisma.comandaItem.create({
+        data: {
+          comandaId,
+          tipo: "PIZZA",
+          descricao: pizzaSize.name,
+          unitPrice,
+          quantidade,
+          sabroesSnapshot,
+        },
+      });
+
+      const updated = await recalcularTotalComanda(comandaId);
+
+      logSecurityEvent("ADICIONAR_ITEM_PIZZA_COMANDA", { adminId: req.admin.id, comandaId, botaoId }, ip);
 
       res.status(201).json(updated);
     } catch (err) {
@@ -288,20 +386,17 @@ router.post(
         return res.status(409).json({ error: "Abra o caixa do salão antes de fechar comandas." });
       }
 
-      const [updatedComanda] = await prisma.$transaction([
-        prisma.comanda.update({
-          where: { id: comandaId },
-          data: {
-            status: "FECHADA",
-            fechadaEm: new Date(),
-            paymentMethod,
-            atendenteFechamentoId: req.admin.id,
-            caixaSessaoId: caixaSessao.id,
-          },
-          include: { itens: true },
-        }),
-        prisma.mesa.update({ where: { id: comanda.mesaId }, data: { status: "LIVRE" } }),
-      ]);
+      const updatedComanda = await prisma.comanda.update({
+        where: { id: comandaId },
+        data: {
+          status: "FECHADA",
+          fechadaEm: new Date(),
+          paymentMethod,
+          atendenteFechamentoId: req.admin.id,
+          caixaSessaoId: caixaSessao.id,
+        },
+        include: { itens: true },
+      });
 
       logSecurityEvent("FECHAR_COMANDA", { adminId: req.admin.id, comandaId, paymentMethod }, ip);
       logAuditChange(
@@ -321,50 +416,5 @@ router.post(
     }
   }
 );
-
-// ---------- Preços do rodízio ----------
-
-/**
- * GET /api/salao/rodizio/precos
- */
-router.get("/rodizio/precos", requireAuth, requireAnyRole(...SALAO_ROLES), adminReadLimiter, attachLojaId, async (req, res, next) => {
-  try {
-    const precos = await prisma.rodizioPreco.findMany({ where: { lojaId: req.lojaId }, orderBy: { faixa: "asc" } });
-    res.json(precos);
-  } catch (err) {
-    next(err);
-  }
-});
-
-/**
- * PUT /api/salao/rodizio/precos/:faixa
- * Cria ou atualiza o preço da faixa (upsert) — cadastro simples de catálogo.
- */
-router.put("/rodizio/precos/:faixa", requireAuth, requireAnyRole(...RODIZIO_WRITE_ROLES), adminWriteLimiter, attachLojaId, async (req, res, next) => {
-  try {
-    const faixa = String(req.params.faixa || "").toUpperCase();
-    const { preco, active } = req.body;
-    const ip = req.ip || req.connection.remoteAddress;
-
-    if (!["ADULTO", "CRIANCA", "MEIA"].includes(faixa)) {
-      return res.status(400).json({ error: "Faixa inválida." });
-    }
-    if (preco == null || isNaN(Number(preco)) || Number(preco) <= 0) {
-      return res.status(400).json({ error: "Preço inválido." });
-    }
-
-    const precoRodizio = await prisma.rodizioPreco.upsert({
-      where: { lojaId_faixa: { lojaId: req.lojaId, faixa } },
-      update: { preco: Number(preco), ...(active != null ? { active: Boolean(active) } : {}) },
-      create: { lojaId: req.lojaId, faixa, preco: Number(preco), active: active != null ? Boolean(active) : true },
-    });
-
-    logSecurityEvent("UPDATE_RODIZIO_PRECO", { adminId: req.admin.id, faixa }, ip);
-
-    res.json(precoRodizio);
-  } catch (err) {
-    next(err);
-  }
-});
 
 module.exports = router;

@@ -232,7 +232,7 @@ const productSchema = Joi.object({
     .max(100)
     .required(),
   category: Joi.string()
-    .valid("COMBO", "BEBIDA", "ESPECIAL")
+    .valid("COMBO", "BEBIDA", "ESPECIAL", "EXTRA", "RODIZIO")
     .required(),
   price: Joi.number()
     .positive()
@@ -302,27 +302,103 @@ const productPatchSchema = Joi.object({
 }).min(1);
 
 /**
- * Schema para adicionar item a uma comanda de salão (rodízio por faixa ou produto/bebida)
+ * Schema para config do módulo PDV/Salão em grade (1:1 por loja)
  */
-const adicionarItemComandaSchema = Joi.object({
+const lojaConfigSchema = Joi.object({
+  modoAdicionalSabor: Joi.string()
+    .valid("CHEIO")
+    .messages({
+      "any.only": "Modo de cálculo ainda não implementado nesta fase (só CHEIO disponível)",
+    }),
+  usaBorda: Joi.boolean(),
+  usaMesa: Joi.boolean(),
+}).min(1);
+
+/**
+ * Schema para criar/editar um grupo da grade do PDV
+ */
+const grupoPdvSchema = Joi.object({
+  nome: Joi.string().max(50).required(),
+  cor: Joi.string()
+    .pattern(/^#[0-9A-Fa-f]{6}$/)
+    .allow(null, ""),
+  corFonte: Joi.string()
+    .pattern(/^#[0-9A-Fa-f]{6}$/)
+    .allow(null, ""),
+  posicao: Joi.number().integer().min(0).required(),
+  ativo: Joi.boolean(),
+});
+
+/**
+ * Schema para reordenar grupos/botões da grade do PDV em lote
+ */
+const reordenarPdvSchema = Joi.object({
+  items: Joi.array()
+    .items(
+      Joi.object({
+        id: Joi.number().integer().positive().required(),
+        posicao: Joi.number().integer().min(0).required(),
+      })
+    )
+    .min(1)
+    .required(),
+});
+
+/**
+ * Schema para criar/editar um botão da grade do PDV — aponta para PizzaSize
+ * (monta sabores) ou Product (lança direto), nunca os dois.
+ */
+const botaoPdvSchema = Joi.object({
+  grupoId: Joi.number().integer().positive().required(),
+  posicao: Joi.number().integer().min(0).required(),
+  labelBotao: Joi.string().max(60).required(),
+  cor: Joi.string()
+    .pattern(/^#[0-9A-Fa-f]{6}$/)
+    .allow(null, ""),
   tipo: Joi.string()
-    .valid("RODIZIO", "PRODUTO")
+    .valid("PIZZA", "PRODUTO")
     .required()
     .messages({
-      "any.only": "Tipo de item deve ser RODIZIO ou PRODUTO",
-      "any.required": "Tipo de item é obrigatório",
+      "any.only": "Tipo de botão deve ser PIZZA ou PRODUTO",
+      "any.required": "Tipo de botão é obrigatório",
     }),
-  faixaRodizio: Joi.string()
-    .valid("ADULTO", "CRIANCA", "MEIA")
-    .when("tipo", { is: "RODIZIO", then: Joi.required(), otherwise: Joi.forbidden() }),
+  pizzaSizeId: Joi.number()
+    .integer()
+    .positive()
+    .when("tipo", { is: "PIZZA", then: Joi.required(), otherwise: Joi.forbidden() }),
   productId: Joi.number()
     .integer()
     .positive()
     .when("tipo", { is: "PRODUTO", then: Joi.required(), otherwise: Joi.forbidden() }),
-  quantity: Joi.number()
-    .positive()
-    .max(100)
-    .required(),
+  ativo: Joi.boolean(),
+});
+
+/**
+ * Schema "solto" para abrir uma comanda — numeroMesa é validado contra
+ * LojaConfig.usaMesa no handler (regra cross-record, não cabe em Joi puro).
+ */
+const abrirComandaSchema = Joi.object({
+  numeroMesa: Joi.number().integer().positive().allow(null),
+});
+
+/**
+ * Schema para lançar um item PRODUTO (bebida/extra/rodízio) numa comanda.
+ * O tipo do botão (PRODUTO) é conferido no handler após carregar o BotaoPDV.
+ */
+const adicionarItemProdutoSchema = Joi.object({
+  botaoId: Joi.number().integer().positive().required(),
+  quantidade: Joi.number().integer().positive().max(100).default(1),
+});
+
+/**
+ * Schema para lançar um item PIZZA (montador) numa comanda. maxSabores e
+ * usaBorda são validados no handler contra PizzaSize/LojaConfig da loja.
+ */
+const adicionarItemPizzaSchema = Joi.object({
+  botaoId: Joi.number().integer().positive().required(),
+  sabores: Joi.array().items(Joi.number().integer().positive()).min(1).required(),
+  borderId: Joi.number().integer().positive().allow(null),
+  quantidade: Joi.number().integer().positive().max(100).default(1),
 });
 
 /**
@@ -482,7 +558,13 @@ module.exports = {
   flavorPatchSchema,
   borderPatchSchema,
   productPatchSchema,
-  adicionarItemComandaSchema,
+  lojaConfigSchema,
+  grupoPdvSchema,
+  reordenarPdvSchema,
+  botaoPdvSchema,
+  abrirComandaSchema,
+  adicionarItemProdutoSchema,
+  adicionarItemPizzaSchema,
   fecharComandaSchema,
   abrirCaixaSchema,
   movimentoCaixaSchema,
