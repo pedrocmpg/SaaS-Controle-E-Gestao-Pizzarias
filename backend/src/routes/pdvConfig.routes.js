@@ -86,10 +86,17 @@ router.put(
  */
 router.get("/grupos", requireAuth, requireAnyRole(...PDV_CONFIG_ROLES), adminReadLimiter, attachLojaId, async (req, res, next) => {
   try {
+    // pizzaSize/product são necessários no PDV: o montador usa pizzaSize.maxFlavors
+    // para limitar os sabores por tamanho, e a grade usa product.category (RODIZIO).
     const grupos = await prisma.grupoPDV.findMany({
       where: { lojaId: req.lojaId },
       orderBy: { posicao: "asc" },
-      include: { botoes: { orderBy: { posicao: "asc" } } },
+      include: {
+        botoes: {
+          orderBy: { posicao: "asc" },
+          include: { pizzaSize: true, product: true },
+        },
+      },
     });
     res.json(grupos);
   } catch (err) {
@@ -241,6 +248,7 @@ router.get("/botoes", requireAuth, requireAnyRole(...PDV_CONFIG_ROLES), adminRea
     const botoes = await prisma.botaoPDV.findMany({
       where: { lojaId: req.lojaId, ...(grupoId ? { grupoId } : {}) },
       orderBy: { posicao: "asc" },
+      include: { pizzaSize: true, product: true },
     });
     res.json(botoes);
   } catch (err) {

@@ -17,7 +17,11 @@ export default function MontadorPizzaModal({ comandaId, botao, usaBorda, onClose
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
-  const maxFlavors = botao.pizzaSize?.maxFlavors || 1;
+  // maxFlavors vem de PizzaSize (relação incluída em /pdv-config/grupos). Se a
+  // relação não vier, cair em 1 silenciosamente esconde o problema — avisamos.
+  const maxFlavors = botao.pizzaSize?.maxFlavors ?? null;
+  const maxFlavorsInvalido = maxFlavors == null;
+  const limiteSabores = maxFlavors ?? 1;
 
   useEffect(() => {
     Promise.all([
@@ -32,7 +36,7 @@ export default function MontadorPizzaModal({ comandaId, botao, usaBorda, onClose
   function toggleSabor(id) {
     setSaboresSelecionados((prev) => {
       if (prev.includes(id)) return prev.filter((s) => s !== id);
-      if (prev.length >= maxFlavors) return prev;
+      if (prev.length >= limiteSabores) return prev;
       return [...prev, id];
     });
   }
@@ -81,13 +85,19 @@ export default function MontadorPizzaModal({ comandaId, botao, usaBorda, onClose
           ) : (
             <>
               <div>
+                {maxFlavorsInvalido && (
+                  <p className="text-xs text-red-500 mb-2">
+                    Não foi possível ler o máximo de sabores deste tamanho — limitado a 1. Verifique o cadastro do
+                    tamanho na grade do PDV.
+                  </p>
+                )}
                 <p className="text-xs font-semibold text-ink-soft mb-2">
-                  Sabores (até {maxFlavors}) · {saboresSelecionados.length}/{maxFlavors}
+                  Sabores (até {limiteSabores}) · {saboresSelecionados.length}/{limiteSabores}
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   {flavors.map((flavor) => {
                     const selecionado = saboresSelecionados.includes(flavor.id);
-                    const desabilitado = !selecionado && saboresSelecionados.length >= maxFlavors;
+                    const desabilitado = !selecionado && saboresSelecionados.length >= limiteSabores;
                     return (
                       <button
                         key={flavor.id}
