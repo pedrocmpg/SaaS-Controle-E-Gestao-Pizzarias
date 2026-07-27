@@ -12,28 +12,14 @@ const {
 } = require("../validators/schemas");
 const { logSecurityEvent } = require("../lib/securityLogger");
 const { logAuditChange } = require("../middleware/auditLogger");
-const { resolveLojaId } = require("../lib/lojaScope");
+const attachLojaId = require("../middleware/attachLojaId");
 const { calcularPrecoPizza } = require("../lib/pdvPricing");
+const { HttpError, conflito, responderSeHttpError } = require("../lib/httpError");
 
 const router = express.Router();
 
 // Roles que podem operar o salão (comandas) — mesmo padrão de ORDER_ROLES.
 const SALAO_ROLES = ["SUPER_ADMIN", "ADMIN", "GERENTE", "ATENDENTE"];
-
-/**
- * Middleware: resolve e anexa o lojaId efetivo do operador (isolamento multi-tenant).
- */
-async function attachLojaId(req, res, next) {
-  try {
-    req.lojaId = await resolveLojaId(req);
-    if (req.lojaId == null) {
-      return res.status(400).json({ error: "Nenhuma loja associada a esta requisição." });
-    }
-    next();
-  } catch (err) {
-    next(err);
-  }
-}
 
 /**
  * Recalcula e persiste o totalPrice de uma comanda a partir dos itens atuais.
@@ -408,45 +394,53 @@ router.post(
         return res.status(400).json({ error: "ID inválido." });
       }
 
-      const comanda = await prisma.comanda.findFirst({
-        where: { id: comandaId, lojaId: req.lojaId },
-        include: { itens: true },
-      });
-      if (!comanda) {
-        return res.status(404).json({ error: "Comanda não encontrada nesta loja." });
-      }
-      if (comanda.status !== "ABERTA") {
-        return res.status(409).json({ error: "Comanda não está aberta." });
-      }
-      if (comanda.itens.length === 0) {
-        return res.status(400).json({ error: "Adicione ao menos um item antes de fechar a comanda." });
-      }
+      // Transação Serializable: a comanda tem que ser lida, validada e fechada como uma coisa
+      // só. Sem isso, duplo clique em "fechar" pode vincular a comanda a duas sessões de caixa
+      // diferentes (se um fechamento de caixa acontecer no meio) e distorcer o total do turno.
+      const updatedComanda = await prisma.$transaction(
+        async (tx) => {
+          const comanda = await tx.comanda.findFirst({
+            where: { id: comandaId, lojaId: req.lojaId },
+            include: { itens: true },
+          });
+          if (!comanda) {
+            throw new HttpError(404, "Comanda não encontrada nesta loja.");
+          }
+          if (comanda.status !== "ABERTA") {
+            throw conflito("Comanda não está aberta.");
+          }
+          if (comanda.itens.length === 0) {
+            throw new HttpError(400, "Adicione ao menos um item antes de fechar a comanda.");
+          }
 
-      const caixaSessao = await prisma.caixaSessao.findFirst({
-        where: { lojaId: req.lojaId, tipo: "SALAO", status: "ABERTO" },
-      });
-      if (!caixaSessao) {
-        return res.status(409).json({ error: "Abra o caixa do salão antes de fechar comandas." });
-      }
+          const caixaSessao = await tx.caixaSessao.findFirst({
+            where: { lojaId: req.lojaId, tipo: "SALAO", status: "ABERTO" },
+          });
+          if (!caixaSessao) {
+            throw conflito("Abra o caixa do salão antes de fechar comandas.");
+          }
 
-      const updatedComanda = await prisma.comanda.update({
-        where: { id: comandaId },
-        data: {
-          status: "FECHADA",
-          fechadaEm: new Date(),
-          paymentMethod,
-          atendenteFechamentoId: req.admin.id,
-          caixaSessaoId: caixaSessao.id,
+          return tx.comanda.update({
+            where: { id: comandaId },
+            data: {
+              status: "FECHADA",
+              fechadaEm: new Date(),
+              paymentMethod,
+              atendenteFechamentoId: req.admin.id,
+              caixaSessaoId: caixaSessao.id,
+            },
+            include: { itens: true },
+          });
         },
-        include: { itens: true },
-      });
+        { isolationLevel: "Serializable" }
+      );
 
       logSecurityEvent("FECHAR_COMANDA", { adminId: req.admin.id, comandaId, paymentMethod }, ip);
       logAuditChange(
         "Comanda",
         comandaId,
         "UPDATE",
-        { status: comanda.status },
+        { status: "ABERTA" },
         { status: updatedComanda.status, paymentMethod },
         req.admin.id,
         ip,
@@ -455,6 +449,10 @@ router.post(
 
       res.json(updatedComanda);
     } catch (err) {
+      if (responderSeHttpError(err, res)) return;
+      if (err.code === "P2034") {
+        return res.status(409).json({ error: "Fechamento simultâneo detectado. Recarregue e tente novamente." });
+      }
       next(err);
     }
   }

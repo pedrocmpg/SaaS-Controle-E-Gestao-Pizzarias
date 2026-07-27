@@ -7,25 +7,13 @@ const { auditCatalogChange } = require("../middleware/auditLogger");
 const validateRequest = require("../middleware/validateRequest");
 const { ofertaSchema, ofertaPatchSchema } = require("../validators/schemas");
 const { logSecurityEvent } = require("../lib/securityLogger");
-const { resolveLojaId } = require("../lib/lojaScope");
+const attachLojaId = require("../middleware/attachLojaId");
 
 const router = express.Router();
 
 // Mesmos grupos de papel usados no restante do cardápio (catalog.routes.js).
 const OFERTA_READ_ROLES = ["SUPER_ADMIN", "ADMIN", "GERENTE", "ATENDENTE"];
 const OFERTA_WRITE_ROLES = ["SUPER_ADMIN", "ADMIN", "GERENTE"];
-
-async function attachLojaId(req, res, next) {
-  try {
-    req.lojaId = await resolveLojaId(req);
-    if (req.lojaId == null) {
-      return res.status(400).json({ error: "Nenhuma loja associada a esta requisição." });
-    }
-    next();
-  } catch (err) {
-    next(err);
-  }
-}
 
 function serializeOferta(oferta) {
   return {

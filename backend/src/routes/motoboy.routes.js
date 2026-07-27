@@ -11,7 +11,9 @@ const {
 } = require("../validators/schemas");
 const { logSecurityEvent } = require("../lib/securityLogger");
 const { logAuditChange } = require("../middleware/auditLogger");
-const { resolveLojaId } = require("../lib/lojaScope");
+const attachLojaId = require("../middleware/attachLojaId");
+const { calcularFechamentoTurno } = require("../lib/financeiro");
+const { HttpError, conflito, responderSeHttpError } = require("../lib/httpError");
 
 const router = express.Router();
 
@@ -21,18 +23,6 @@ const DESPACHO_ROLES = ["SUPER_ADMIN", "ADMIN", "GERENTE", "ATENDENTE"];
 const TURNO_MOTOBOY_ROLES = ["SUPER_ADMIN", "ADMIN", "GERENTE", "ATENDENTE", "MOTOBOY"];
 // Conferência do turno (checagem do dia seguinte) — mais restrita, mesmo padrão do Caixa.
 const CONFERENCIA_MOTOBOY_ROLES = ["SUPER_ADMIN", "ADMIN", "GERENTE"];
-
-async function attachLojaId(req, res, next) {
-  try {
-    req.lojaId = await resolveLojaId(req);
-    if (req.lojaId == null) {
-      return res.status(400).json({ error: "Nenhuma loja associada a esta requisição." });
-    }
-    next();
-  } catch (err) {
-    next(err);
-  }
-}
 
 /**
  * GET /api/motoboy/lista
@@ -201,66 +191,67 @@ router.post("/turnos/:id/fechar", requireAuth, requireAnyRole(...TURNO_MOTOBOY_R
       return res.status(400).json({ error: "ID inválido." });
     }
 
-    const turno = await prisma.turnoMotoboy.findFirst({ where: { id: turnoMotoboyId, lojaId: req.lojaId } });
-    if (!turno) {
-      return res.status(404).json({ error: "Turno de motoboy não encontrado nesta loja." });
-    }
-    if (turno.status !== "ABERTO") {
-      return res.status(409).json({ error: "Turno de motoboy não está aberto." });
-    }
+    // Transação Serializable: ler, conferir status, calcular e gravar como uma coisa só.
+    // Sem isso, duplo clique no botão "fechar" recalcula o acerto do motoboy duas vezes.
+    const atualizado = await prisma.$transaction(
+      async (tx) => {
+        const turno = await tx.turnoMotoboy.findFirst({ where: { id: turnoMotoboyId, lojaId: req.lojaId } });
+        if (!turno) {
+          throw new HttpError(404, "Turno de motoboy não encontrado nesta loja.");
+        }
+        if (turno.status !== "ABERTO") {
+          throw conflito("Turno de motoboy não está aberto.");
+        }
 
-    const [loja, pedidos, extras] = await Promise.all([
-      prisma.loja.findUnique({ where: { id: req.lojaId } }),
-      // FK direta (turnoMotoboyId) elimina ambiguidade entre turnos do mesmo motoboy no mesmo dia.
-      prisma.order.findMany({ where: { turnoMotoboyId, status: "ENTREGUE" } }),
-      prisma.extraMotoboy.findMany({ where: { turnoMotoboyId } }),
-    ]);
+        const [loja, pedidos, extras] = await Promise.all([
+          tx.loja.findUnique({ where: { id: req.lojaId } }),
+          // FK direta (turnoMotoboyId) elimina ambiguidade entre turnos do mesmo motoboy no mesmo dia.
+          tx.order.findMany({ where: { turnoMotoboyId, status: "ENTREGUE" } }),
+          tx.extraMotoboy.findMany({ where: { turnoMotoboyId } }),
+        ]);
 
-    const totalEntregas = pedidos.length;
-    const valorPorEntrega = Number(loja.valorPorEntregaMotoboy);
-    const valorAluguelMoto = Number(loja.valorAluguelMotoNoite);
-    const totalExtras = extras.reduce((sum, e) => sum + Number(e.valor), 0);
-    const valorDaNoite = totalEntregas * valorPorEntrega + totalExtras + valorAluguelMoto;
+        const valorPorEntrega = Number(loja.valorPorEntregaMotoboy);
+        const valorAluguelMoto = Number(loja.valorAluguelMotoNoite);
+        const { totalEntregas, totalExtras, valorDaNoite, totalRecebidoDinheiro, acerto, sangria } =
+          calcularFechamentoTurno({
+            fundoTroco: turno.fundoTroco,
+            pedidos,
+            extras,
+            valorPorEntrega,
+            valorAluguelMoto,
+          });
 
-    // Dinheiro físico que o motoboy está segurando = fundo de troco inicial + entregas cobradas
-    // em dinheiro na entrega. O fundo de troco é capital de giro e sempre volta inteiro.
-    const totalRecebidoDinheiro =
-      Number(turno.fundoTroco) +
-      pedidos
-        .filter((p) => p.cobradoNaEntrega && p.paymentMethod === "DINHEIRO")
-        .reduce((sum, p) => sum + Number(p.totalPrice), 0);
-
-    // Desconta o fundo de troco antes de comparar com valorDaNoite — ele nunca é ganho de ninguém.
-    const acerto = totalRecebidoDinheiro - Number(turno.fundoTroco) - valorDaNoite;
-    // acerto > 0: motoboy fica com mais dinheiro do que devia -> repassa a diferença (sangria).
-    // acerto < 0: motoboy ficou com menos do que devia -> pizzaria paga a diferença (nunca sangria).
-    const sangria = acerto > 0 ? acerto : 0;
-
-    const atualizado = await prisma.turnoMotoboy.update({
-      where: { id: turnoMotoboyId },
-      data: {
-        status: "FECHADO_AGUARDANDO_CONFERENCIA",
-        fechadoPorId: req.admin.id,
-        fechadoEm: new Date(),
-        totalEntregas,
-        valorPorEntrega,
-        valorAluguelMoto,
-        totalExtras,
-        valorDaNoite,
-        totalRecebidoDinheiro,
-        totalRecebidoCartao,
-        totalRecebidoPix,
-        acerto,
-        sangria,
+        return tx.turnoMotoboy.update({
+          where: { id: turnoMotoboyId },
+          data: {
+            status: "FECHADO_AGUARDANDO_CONFERENCIA",
+            fechadoPorId: req.admin.id,
+            fechadoEm: new Date(),
+            totalEntregas,
+            valorPorEntrega,
+            valorAluguelMoto,
+            totalExtras,
+            valorDaNoite,
+            totalRecebidoDinheiro,
+            totalRecebidoCartao,
+            totalRecebidoPix,
+            acerto,
+            sangria,
+          },
+        });
       },
-    });
+      { isolationLevel: "Serializable" }
+    );
+
+    const acerto = Number(atualizado.acerto);
+    const sangria = Number(atualizado.sangria);
 
     logSecurityEvent("FECHAR_TURNO_MOTOBOY", { adminId: req.admin.id, turnoMotoboyId, acerto, sangria }, ip);
     logAuditChange(
       "TurnoMotoboy",
       turnoMotoboyId,
       "UPDATE",
-      { status: turno.status },
+      { status: "ABERTO" },
       { status: atualizado.status, acerto, sangria },
       req.admin.id,
       ip,
@@ -269,6 +260,10 @@ router.post("/turnos/:id/fechar", requireAuth, requireAnyRole(...TURNO_MOTOBOY_R
 
     res.json(atualizado);
   } catch (err) {
+    if (responderSeHttpError(err, res)) return;
+    if (err.code === "P2034") {
+      return res.status(409).json({ error: "Fechamento simultâneo detectado. Recarregue e tente novamente." });
+    }
     next(err);
   }
 });

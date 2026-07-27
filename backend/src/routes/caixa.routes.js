@@ -7,7 +7,9 @@ const validateRequest = require("../middleware/validateRequest");
 const { abrirCaixaSchema, movimentoCaixaSchema, conferirCaixaSchema } = require("../validators/schemas");
 const { logSecurityEvent } = require("../lib/securityLogger");
 const { logAuditChange } = require("../middleware/auditLogger");
-const { resolveLojaId } = require("../lib/lojaScope");
+const attachLojaId = require("../middleware/attachLojaId");
+const { calcularFechamentoCaixa } = require("../lib/financeiro");
+const { HttpError, conflito, responderSeHttpError } = require("../lib/httpError");
 
 const router = express.Router();
 
@@ -15,20 +17,6 @@ const router = express.Router();
 const CAIXA_ROLES = ["SUPER_ADMIN", "ADMIN", "GERENTE", "ATENDENTE"];
 // Conferência do caixa (checagem do dia seguinte) — mais restrita que a operação do turno.
 const CONFERENCIA_ROLES = ["SUPER_ADMIN", "ADMIN", "GERENTE"];
-
-const CARTAO_METHODS = ["CARTAO_CREDITO", "CARTAO_DEBITO"];
-
-async function attachLojaId(req, res, next) {
-  try {
-    req.lojaId = await resolveLojaId(req);
-    if (req.lojaId == null) {
-      return res.status(400).json({ error: "Nenhuma loja associada a esta requisição." });
-    }
-    next();
-  } catch (err) {
-    next(err);
-  }
-}
 
 /**
  * GET /api/caixa/atual?tipo=SALAO
@@ -163,53 +151,51 @@ router.post("/:id/fechar", requireAuth, requireAnyRole(...CAIXA_ROLES), adminWri
       return res.status(400).json({ error: "ID inválido." });
     }
 
-    const sessao = await prisma.caixaSessao.findFirst({ where: { id: caixaSessaoId, lojaId: req.lojaId } });
-    if (!sessao) {
-      return res.status(404).json({ error: "Sessão de caixa não encontrada nesta loja." });
-    }
-    if (sessao.status !== "ABERTO") {
-      return res.status(409).json({ error: "Sessão de caixa não está aberta." });
-    }
+    // Tudo em uma transação Serializable: ler, conferir o status, calcular e gravar. Sem isso,
+    // dois cliques rápidos em "fechar" passam ambos pela checagem antes do primeiro commit e
+    // o cálculo roda duas vezes. Fechamento é raro (alguns por noite) — contenção é irrelevante
+    // perto do custo de um acerto financeiro errado.
+    const atualizada = await prisma.$transaction(
+      async (tx) => {
+        const sessao = await tx.caixaSessao.findFirst({ where: { id: caixaSessaoId, lojaId: req.lojaId } });
+        if (!sessao) {
+          throw new HttpError(404, "Sessão de caixa não encontrada nesta loja.");
+        }
+        if (sessao.status !== "ABERTO") {
+          throw conflito("Sessão de caixa não está aberta.");
+        }
 
-    const [comandas, movimentos] = await Promise.all([
-      prisma.comanda.findMany({ where: { caixaSessaoId }, select: { paymentMethod: true, totalPrice: true } }),
-      prisma.movimentoCaixa.findMany({ where: { caixaSessaoId } }),
-    ]);
+        const [comandas, movimentos] = await Promise.all([
+          tx.comanda.findMany({ where: { caixaSessaoId }, select: { paymentMethod: true, totalPrice: true } }),
+          tx.movimentoCaixa.findMany({ where: { caixaSessaoId } }),
+        ]);
 
-    const somarPor = (metodos) =>
-      comandas.filter((c) => metodos.includes(c.paymentMethod)).reduce((sum, c) => sum + Number(c.totalPrice), 0);
+        const totais = calcularFechamentoCaixa({ fundoTroco: sessao.fundoTroco, comandas, movimentos });
 
-    const totalVendasDinheiro = somarPor(["DINHEIRO"]);
-    const totalVendasCartao = somarPor(CARTAO_METHODS);
-    const totalVendasPix = somarPor(["PIX"]);
-    const totalSangrias = movimentos.filter((m) => m.tipo === "SANGRIA").reduce((sum, m) => sum + Number(m.valor), 0);
-    const totalSuprimentos = movimentos.filter((m) => m.tipo === "SUPRIMENTO").reduce((sum, m) => sum + Number(m.valor), 0);
-
-    // Cartão/PIX nunca entram na gaveta — só dinheiro compõe o saldo em espécie esperado.
-    const saldoFinalCalculado = Number(sessao.fundoTroco) + totalVendasDinheiro - totalSangrias + totalSuprimentos;
-
-    const atualizada = await prisma.caixaSessao.update({
-      where: { id: caixaSessaoId },
-      data: {
-        status: "FECHADO_AGUARDANDO_CONFERENCIA",
-        fechadoPorId: req.admin.id,
-        fechadoEm: new Date(),
-        totalVendasDinheiro,
-        totalVendasCartao,
-        totalVendasPix,
-        totalSangrias,
-        totalSuprimentos,
-        saldoFinalCalculado,
+        return tx.caixaSessao.update({
+          where: { id: caixaSessaoId },
+          data: {
+            status: "FECHADO_AGUARDANDO_CONFERENCIA",
+            fechadoPorId: req.admin.id,
+            fechadoEm: new Date(),
+            ...totais,
+          },
+        });
       },
-    });
+      { isolationLevel: "Serializable" }
+    );
 
-    logSecurityEvent("FECHAR_CAIXA", { adminId: req.admin.id, caixaSessaoId, saldoFinalCalculado }, ip);
+    logSecurityEvent(
+      "FECHAR_CAIXA",
+      { adminId: req.admin.id, caixaSessaoId, saldoFinalCalculado: Number(atualizada.saldoFinalCalculado) },
+      ip
+    );
     logAuditChange(
       "CaixaSessao",
       caixaSessaoId,
       "UPDATE",
-      { status: sessao.status },
-      { status: atualizada.status, saldoFinalCalculado },
+      { status: "ABERTO" },
+      { status: atualizada.status, saldoFinalCalculado: Number(atualizada.saldoFinalCalculado) },
       req.admin.id,
       ip,
       req.get("user-agent")
@@ -217,6 +203,11 @@ router.post("/:id/fechar", requireAuth, requireAnyRole(...CAIXA_ROLES), adminWri
 
     res.json(atualizada);
   } catch (err) {
+    if (responderSeHttpError(err, res)) return;
+    // Conflito de escrita serializável: outra requisição fechou a mesma sessão em paralelo.
+    if (err.code === "P2034") {
+      return res.status(409).json({ error: "Fechamento simultâneo detectado. Recarregue e tente novamente." });
+    }
     next(err);
   }
 });

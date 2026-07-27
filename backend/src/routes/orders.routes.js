@@ -1,7 +1,7 @@
 const express = require("express");
 const prisma = require("../lib/prisma");
 const { encrypt, decrypt, hashPhone } = require("../lib/encryption");
-const { resolveLojaId } = require("../lib/lojaScope");
+const attachLojaId = require("../middleware/attachLojaId");
 const { requireAuth } = require("../middleware/auth");
 const { requireAnyRole } = require("../middleware/authorization");
 const { orderLimiter, adminReadLimiter, adminWriteLimiter } = require("../middleware/rateLimiter");
@@ -26,7 +26,7 @@ const VALID_STATUSES = ALL_STATUSES;
  * - Telefone/endereço criptografados no Order; Cliente upsertado por telefone (histórico).
  * - Notifica o painel da loja em tempo real via WebSocket.
  */
-router.post("/", requireAuth, requireAnyRole(...ORDER_ROLES), adminWriteLimiter, validateRequest(createOrderSchema), async (req, res, next) => {
+router.post("/", requireAuth, requireAnyRole(...ORDER_ROLES), adminWriteLimiter, attachLojaId, validateRequest(createOrderSchema), async (req, res, next) => {
   try {
     const {
       customerName,
@@ -40,11 +40,7 @@ router.post("/", requireAuth, requireAnyRole(...ORDER_ROLES), adminWriteLimiter,
       origem,
     } = req.body;
     const ip = req.ip || req.connection.remoteAddress;
-
-    const lojaId = await resolveLojaId(req);
-    if (lojaId == null) {
-      return res.status(400).json({ error: "Nenhuma loja associada a esta requisição." });
-    }
+    const lojaId = req.lojaId;
 
     const itemsData = items.map((item) => {
       const unitPrice = Number(item.unitPrice);
@@ -127,17 +123,14 @@ router.post("/", requireAuth, requireAnyRole(...ORDER_ROLES), adminWriteLimiter,
  * Busca o cliente por telefone (isolado por loja) para auto-preencher o pedido.
  * Definida antes de GET /:id para não colidir com o parâmetro.
  */
-router.get("/cliente/lookup", requireAuth, requireAnyRole(...ORDER_ROLES), adminReadLimiter, async (req, res, next) => {
+router.get("/cliente/lookup", requireAuth, requireAnyRole(...ORDER_ROLES), adminReadLimiter, attachLojaId, async (req, res, next) => {
   try {
     const { phone } = req.query;
     if (!phone) {
       return res.status(400).json({ error: "Telefone é obrigatório." });
     }
 
-    const lojaId = await resolveLojaId(req);
-    if (lojaId == null) {
-      return res.status(400).json({ error: "Nenhuma loja associada a esta requisição." });
-    }
+    const lojaId = req.lojaId;
 
     const phoneHash = hashPhone(phone);
     if (!phoneHash) {
@@ -307,9 +300,9 @@ function dayKey(date) {
  * GET /api/orders/reports/summary
  * Relatório gerencial por período. Agrega tele-entrega (Order) + salão (Comanda fechada).
  * Query: periodo=hoje|ontem|7dias|30dias|custom (+ from/to em YYYY-MM-DD quando custom).
- * Isolado por loja via resolveLojaId (multi-tenant não-negociável).
+ * Isolado por loja via attachLojaId (multi-tenant não-negociável).
  */
-router.get("/reports/summary", requireAuth, requireAnyRole(...REPORT_ROLES), adminReadLimiter, async (req, res, next) => {
+router.get("/reports/summary", requireAuth, requireAnyRole(...REPORT_ROLES), adminReadLimiter, attachLojaId, async (req, res, next) => {
   try {
     const ip = req.ip || req.connection.remoteAddress;
 
@@ -318,10 +311,7 @@ router.get("/reports/summary", requireAuth, requireAnyRole(...REPORT_ROLES), adm
       return res.status(400).json({ error: "Período inválido. Use hoje|ontem|7dias|30dias|custom (com from/to)." });
     }
 
-    const lojaId = await resolveLojaId(req);
-    if (lojaId == null) {
-      return res.status(400).json({ error: "Não foi possível resolver a loja." });
-    }
+    const lojaId = req.lojaId;
 
     // Tele-entrega: pedidos não cancelados no período.
     const orders = await prisma.order.findMany({

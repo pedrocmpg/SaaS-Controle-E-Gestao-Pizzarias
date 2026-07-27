@@ -7,24 +7,12 @@ const validateRequest = require("../middleware/validateRequest");
 const { lojaConfigSchema, grupoPdvSchema, reordenarPdvSchema, botaoPdvSchema } = require("../validators/schemas");
 const { logSecurityEvent } = require("../lib/securityLogger");
 const { logAuditChange } = require("../middleware/auditLogger");
-const { resolveLojaId } = require("../lib/lojaScope");
+const attachLojaId = require("../middleware/attachLojaId");
 
 const router = express.Router();
 
 // Configuração da grade (grupos/botões/LojaConfig) — só quem gerencia o cardápio, não ATENDENTE.
 const PDV_CONFIG_ROLES = ["SUPER_ADMIN", "ADMIN", "GERENTE"];
-
-async function attachLojaId(req, res, next) {
-  try {
-    req.lojaId = await resolveLojaId(req);
-    if (req.lojaId == null) {
-      return res.status(400).json({ error: "Nenhuma loja associada a esta requisição." });
-    }
-    next();
-  } catch (err) {
-    next(err);
-  }
-}
 
 // ---------- Config da loja ----------
 

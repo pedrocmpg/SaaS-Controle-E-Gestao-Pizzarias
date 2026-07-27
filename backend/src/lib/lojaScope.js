@@ -6,25 +6,24 @@ const prisma = require("./prisma");
  * Regras:
  * - Operador vinculado a uma loja (`req.admin.lojaId`) → SEMPRE essa loja
  *   (não pode ser sobrescrito por body/query — isolamento não-negociável).
- * - SUPER_ADMIN global (lojaId null) → usa `lojaId` do body ou da query, se informado.
- * - Fallback do piloto: se ainda não resolveu e `fallbackToFirst`, usa a loja única (menor id).
+ * - SUPER_ADMIN global (lojaId null) → usa `lojaId` do body ou da query, validando
+ *   que a loja existe (id inexistente vira 400 legível, não FK violation 500).
+ * - Não resolveu → null. NÃO existe fallback: cair na "primeira loja" faria uma
+ *   requisição malformada gravar dado de um tenant dentro do outro, silenciosamente.
  *
  * @returns {Promise<number|null>} lojaId ou null se não for possível resolver.
  */
-async function resolveLojaId(req, { fallbackToFirst = true } = {}) {
+/** Busca padrão da loja. Injetável nos testes para não exigir banco. */
+const buscarLoja = (id) => prisma.loja.findUnique({ where: { id }, select: { id: true } });
+
+async function resolveLojaId(req, { lojaExiste = buscarLoja } = {}) {
   if (req.admin && req.admin.lojaId != null) return req.admin.lojaId;
 
-  const fromBody = req.body && req.body.lojaId;
-  if (fromBody != null && !isNaN(parseInt(fromBody))) return parseInt(fromBody);
+  const informado = (req.body && req.body.lojaId) ?? (req.query && req.query.lojaId);
+  if (informado == null || isNaN(parseInt(informado))) return null;
 
-  const fromQuery = req.query && req.query.lojaId;
-  if (fromQuery != null && !isNaN(parseInt(fromQuery))) return parseInt(fromQuery);
-
-  if (fallbackToFirst) {
-    const loja = await prisma.loja.findFirst({ orderBy: { id: "asc" }, select: { id: true } });
-    return loja ? loja.id : null;
-  }
-  return null;
+  const loja = await lojaExiste(parseInt(informado));
+  return loja ? loja.id : null;
 }
 
 module.exports = { resolveLojaId };

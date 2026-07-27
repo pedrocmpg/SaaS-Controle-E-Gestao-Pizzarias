@@ -16,7 +16,7 @@ const {
   productPatchSchema,
 } = require("../validators/schemas");
 const { logSecurityEvent } = require("../lib/securityLogger");
-const { resolveLojaId } = require("../lib/lojaScope");
+const attachLojaId = require("../middleware/attachLojaId");
 
 const router = express.Router();
 
@@ -24,21 +24,6 @@ const router = express.Router();
 const CATALOG_READ_ROLES = ["SUPER_ADMIN", "ADMIN", "GERENTE", "ATENDENTE"];
 // Roles que podem editar o cardápio.
 const CATALOG_WRITE_ROLES = ["SUPER_ADMIN", "ADMIN", "GERENTE"];
-
-/**
- * Middleware: resolve e anexa o lojaId efetivo do operador (isolamento multi-tenant).
- */
-async function attachLojaId(req, res, next) {
-  try {
-    req.lojaId = await resolveLojaId(req);
-    if (req.lojaId == null) {
-      return res.status(400).json({ error: "Nenhuma loja associada a esta requisição." });
-    }
-    next();
-  } catch (err) {
-    next(err);
-  }
-}
 
 /**
  * Garante que o registro pertence à loja do operador antes de alterar/excluir.
