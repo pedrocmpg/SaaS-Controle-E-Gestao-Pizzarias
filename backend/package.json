@@ -10,7 +10,9 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
-    "seed": "node prisma/seed.js"
+    "seed": "node prisma/seed.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@prisma/client": "5.19.1",
@@ -36,6 +38,7 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.4",
-    "prisma": "^5.19.1"
+    "prisma": "^5.19.1",
+    "vitest": "^2.1.9"
   }
 }

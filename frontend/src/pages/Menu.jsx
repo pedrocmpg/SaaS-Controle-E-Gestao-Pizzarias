@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { catalogService } from "../services/api";
 import { useCart } from "../context/CartContext";
-import { Spinner, CardSkeleton } from "../components/ui";
+import { CardSkeleton } from "../components/ui";
 import { useToast } from "../components/ui";
 import PizzaBuilderModal from "../components/PizzaBuilderModal";
 

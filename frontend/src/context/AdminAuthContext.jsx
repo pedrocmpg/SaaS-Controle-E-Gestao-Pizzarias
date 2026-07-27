@@ -20,7 +20,6 @@ export function AdminAuthProvider({ children }) {
       .then((data) => setAdmin(data.admin))
       .catch(() => logout())
       .finally(() => setLoadingAdmin(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   async function login(email, password) {
