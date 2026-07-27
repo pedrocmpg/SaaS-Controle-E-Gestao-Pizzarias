@@ -85,6 +85,16 @@ enum StatusTurnoMotoboy {
   CONFERIDO
 }
 
+/// Forma de pagamento aceita. Enum (e não String livre) para que o banco rejeite variações
+/// como "Dinheiro"/"dinheiro": um valor fora da lista sai silenciosamente do acerto do
+/// motoboy e do breakdown do caixa — sem erro, só dinheiro a menos na conta.
+enum FormaPagamento {
+  DINHEIRO
+  PIX
+  CARTAO_CREDITO
+  CARTAO_DEBITO
+}
+
 /// Categoria de valor extra lançado no turno do motoboy (além de entregas + aluguel)
 enum TipoExtraMotoboy {
   ENTREGA_LONGA
@@ -225,8 +235,8 @@ model Order {
   customerName  String
   phone         String // Criptografado no banco (de/encrypt no app)
   address       String? // Criptografado no banco
-  deliveryType  DeliveryType @default(ENTREGA)
-  paymentMethod String
+  deliveryType  DeliveryType   @default(ENTREGA)
+  paymentMethod FormaPagamento
   notes         String?
   status        OrderStatus  @default(RECEBIDO)
   origem        OrigemPedido @default(TELEFONE)
@@ -294,7 +304,7 @@ model Comanda {
   fechadaEm DateTime?
 
   // Uma só forma de pagamento por comanda (mesma regra do módulo Pedidos)
-  paymentMethod String?
+  paymentMethod FormaPagamento?
   totalPrice    Decimal @default(0) @db.Decimal(10, 2)
 
   atendenteAberturaId   Int?
