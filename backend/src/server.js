@@ -27,6 +27,7 @@ const caixaRoutes = require("./routes/caixa.routes");
 const pdvConfigRoutes = require("./routes/pdvConfig.routes");
 const motoboyRoutes = require("./routes/motoboy.routes");
 const ofertasRoutes = require("./routes/ofertas.routes");
+const impressaoRoutes = require("./routes/impressao.routes");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -92,6 +93,7 @@ app.use("/api/caixa", caixaRoutes);
 app.use("/api/pdv-config", pdvConfigRoutes);
 app.use("/api/motoboy", motoboyRoutes);
 app.use("/api/ofertas", ofertasRoutes);
+app.use("/api/impressao", impressaoRoutes);
 
 // 404
 app.use((req, res) => {

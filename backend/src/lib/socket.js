@@ -74,8 +74,21 @@ function initSocket(server) {
     // Entra apenas na room da loja do admin (isolamento multi-tenant).
     // Operador vinculado → sua loja. SUPER_ADMIN global (lojaId null) → todas as lojas.
     const admin = socket.data.admin || {};
+
+    // O agente local de impressão se declara no handshake. Só vale para operador vinculado
+    // a uma loja: um agente é físico, roda no PC de UMA pizzaria.
+    socket.data.agenteImpressao = Boolean(socket.handshake.auth && socket.handshake.auth.agente) && admin.lojaId != null;
+
     if (admin.lojaId != null) {
       socket.join(`loja:${admin.lojaId}`);
+      if (socket.data.agenteImpressao) {
+        emitAgenteStatus(admin.lojaId, true);
+        socket.on("disconnect", async () => {
+          // Só apaga o indicador se não sobrou nenhum outro agente da loja conectado
+          // (o próprio socket já saiu da room neste ponto).
+          emitAgenteStatus(admin.lojaId, await agenteConectado(admin.lojaId));
+        });
+      }
       return;
     }
 
@@ -115,6 +128,29 @@ function emitDespachoEntregue(lojaId, order) {
   if (io) io.to(`loja:${lojaId}`).emit("despacho:entregue", order);
 }
 
+/** Novo job de impressão para o agente local da loja consumir. */
+function emitImpressaoJob(lojaId, job) {
+  if (io) io.to(`loja:${lojaId}`).emit("impressao:job", job);
+}
+
+/** Avisa o painel que o agente de impressão da loja conectou/desconectou. */
+function emitAgenteStatus(lojaId, conectado) {
+  if (io) io.to(`loja:${lojaId}`).emit("impressao:agente_status", { conectado });
+}
+
+/**
+ * O agente de impressão está online nesta loja?
+ *
+ * Conta sockets na room que se declararam agente (`handshake.auth.agente`). Serve ao
+ * indicador do painel: se a impressora cair no meio do movimento, o atendente precisa
+ * descobrir na hora, não quando a cozinha reclamar.
+ */
+async function agenteConectado(lojaId) {
+  if (!io) return false;
+  const sockets = await io.in(`loja:${lojaId}`).fetchSockets();
+  return sockets.some((s) => s.data && s.data.agenteImpressao);
+}
+
 module.exports = {
   initSocket,
   getIo,
@@ -122,4 +158,7 @@ module.exports = {
   emitPedidoStatus,
   emitDespachoAtribuido,
   emitDespachoEntregue,
+  emitImpressaoJob,
+  emitAgenteStatus,
+  agenteConectado,
 };

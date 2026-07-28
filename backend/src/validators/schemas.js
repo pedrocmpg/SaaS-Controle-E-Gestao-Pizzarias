@@ -543,6 +543,20 @@ const fecharTurnoMotoboySchema = Joi.object({
  */
 const conferirTurnoMotoboySchema = Joi.object({}).unknown(false);
 
+/**
+ * Schema do erro reportado pelo agente local de impressão.
+ * A mensagem é escrita por quem dá suporte por telefone — precisa caber e ser legível.
+ */
+const erroImpressaoSchema = Joi.object({
+  erro: Joi.string()
+    .max(500)
+    .required()
+    .messages({
+      "any.required": "Mensagem de erro é obrigatória",
+      "string.max": "Mensagem de erro deve ter no máximo 500 caracteres",
+    }),
+});
+
 module.exports = {
   loginSchema,
   createOrderSchema,
@@ -573,4 +587,5 @@ module.exports = {
   extraMotoboySchema,
   fecharTurnoMotoboySchema,
   conferirTurnoMotoboySchema,
+  erroImpressaoSchema,
 };

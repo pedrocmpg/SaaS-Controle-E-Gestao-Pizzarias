@@ -11,6 +11,7 @@ const { logSecurityEvent } = require("../lib/securityLogger");
 const { ALL_STATUSES, isValidTransition } = require("../lib/orderStatus");
 const { emitPedidoNovo, emitPedidoStatus, emitDespachoAtribuido, emitDespachoEntregue } = require("../lib/socket");
 const { logAuditChange } = require("../middleware/auditLogger");
+const { enfileirarComandaCozinha, enfileirarCupomPedido } = require("../lib/impressao");
 
 const router = express.Router();
 
@@ -111,6 +112,11 @@ router.post("/", requireAuth, requireAnyRole(...ORDER_ROLES), adminWriteLimiter,
 
     // Notifica o painel em tempo real (room da loja)
     emitPedidoNovo(order.lojaId, responseOrder);
+
+    // Impressão automática da comanda de cozinha: é o disparo que importa. Se o atendente
+    // precisasse clicar para a cozinha saber do pedido, o problema não estaria resolvido.
+    // `seguro`: falha de impressão não pode derrubar a criação do pedido já gravado.
+    await enfileirarComandaCozinha(order.lojaId, order.id, { seguro: true });
 
     res.status(201).json(responseOrder);
   } catch (err) {
@@ -545,6 +551,8 @@ router.patch("/:id/status", requireAuth, requireAnyRole(...ORDER_ROLES), adminWr
     emitPedidoStatus(order.lojaId, order);
     if (status === "SAIU_PARA_ENTREGA") {
       emitDespachoAtribuido(order.lojaId, order);
+      // Cupom do cliente: a via que sai junto com o pedido, na mão do motoboy.
+      await enfileirarCupomPedido(order.lojaId, order.id, { seguro: true });
     }
     if (status === "ENTREGUE") {
       emitDespachoEntregue(order.lojaId, order);

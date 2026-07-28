@@ -14,6 +14,7 @@ const { logAuditChange } = require("../middleware/auditLogger");
 const attachLojaId = require("../middleware/attachLojaId");
 const { calcularFechamentoTurno } = require("../lib/financeiro");
 const { HttpError, conflito, responderSeHttpError } = require("../lib/httpError");
+const { enfileirarRomaneioMotoboy } = require("../lib/impressao");
 
 const router = express.Router();
 
@@ -257,6 +258,11 @@ router.post("/turnos/:id/fechar", requireAuth, requireAnyRole(...TURNO_MOTOBOY_R
       ip,
       req.get("user-agent")
     ).catch((err) => console.error("Erro ao logar auditoria de fechamento de turno de motoboy:", err));
+
+    // Romaneio: comprovante físico do acerto em dinheiro, em duas vias assinadas.
+    // Enfileirado FORA da transação, de propósito — só depois do commit os totais do turno
+    // existem no banco, e o layout precisa ler exatamente os números que ficaram gravados.
+    await enfileirarRomaneioMotoboy(req.lojaId, turnoMotoboyId, { seguro: true });
 
     res.json(atualizado);
   } catch (err) {
