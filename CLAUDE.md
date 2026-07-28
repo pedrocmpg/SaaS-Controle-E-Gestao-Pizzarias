@@ -31,8 +31,9 @@ Ponto mais importante do projeto, não pode ser esquecido em nenhuma decisão de
 - Hoje existe **1 loja em produção** (o piloto), mas o schema já nasceu multi-tenant.
 
 **Como aplicar:** toda query nova leva `lojaId`. O ponto único de resolução de tenant é
-`resolveLojaId` (`backend/src/lib/lojaScope.js`), consumido pelo middleware `attachLojaId`
-que cada arquivo de rotas define. Nunca assumir dado global.
+`resolveLojaId` (`backend/src/lib/lojaScope.js`), consumido pelo middleware **compartilhado**
+`backend/src/middleware/attachLojaId.js` — importe esse, nunca redefina um local. Toda rota
+que toca dado de loja monta esse middleware e usa `req.lojaId`. Nunca assumir dado global.
 
 O `fallbackToFirst` que caía silenciosamente na loja de menor id **foi removido**
 (spec-6, 2026-07-28): hoje, loja não resolvida = 400 + log de segurança, nunca um palpite.
@@ -114,9 +115,12 @@ construção de base** — é profundidade funcional e validação.
 - `Order.turnoMotoboyId` é FK direta (não janela de tempo) — um motoboy pode ter mais de um
   turno no mesmo dia, e sem a FK um pedido entregue com atraso cairia no turno errado.
 - Índice único parcial `turno_motoboy_um_aberto_por_motoboy` cobre a corrida de abrir turno.
+- Cálculo do fechamento vive em `lib/financeiro.js` (função pura, testada) e roda dentro de
+  `$transaction` Serializable. Fechar o turno imprime o romaneio automaticamente.
 - **As fórmulas de fechamento são suposições ainda não confirmadas formalmente pelo
   cliente-piloto**, e o módulo **nunca foi testado ponta a ponta**. É a maior pendência
-  aberta do projeto — e não é de código.
+  aberta do projeto — e não é de código. Os testes provam que o código calcula o que foi
+  especificado; **não** provam que a especificação é o que a pizzaria faz.
 
 ## Backlog priorizado
 
