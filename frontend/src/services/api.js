@@ -133,6 +133,16 @@ export const motoboyService = {
   marcarEntregue: (orderId) => api.patch(`/orders/${orderId}/status`, { status: "ENTREGUE" }).then((r) => r.data),
 };
 
+export const impressaoService = {
+  // Reimpressão é recurso de recuperação (comanda saiu borrada, papel acabou):
+  // o fluxo principal é automático, disparado pelo backend ao criar/despachar o pedido.
+  comanda: (orderId) => api.post(`/impressao/comanda/${orderId}`).then((r) => r.data),
+  cupom: (orderId) => api.post(`/impressao/cupom/${orderId}`).then((r) => r.data),
+  cupomComanda: (comandaId) => api.post(`/impressao/cupom-comanda/${comandaId}`).then((r) => r.data),
+  romaneio: (turnoId) => api.post(`/impressao/romaneio/${turnoId}`).then((r) => r.data),
+  getAgenteStatus: () => api.get("/impressao/agente-status").then((r) => r.data),
+};
+
 export const authService = {
   login: (email, password) => api.post("/auth/login", { email, password }).then((r) => r.data),
   me: () => api.get("/auth/me").then((r) => r.data),

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { ordersService } from "../../services/api";
+import { ordersService, impressaoService } from "../../services/api";
 import { getNextStatus } from "../../services/orderStatus";
 import { connectSocket } from "../../services/socket";
 import { useAdminAuth } from "../../context/AdminAuthContext";
+import BotaoImprimir from "../../components/BotaoImprimir";
 import NovoPedidoModal from "./NovoPedidoModal";
 
 const TABS = [
@@ -205,6 +206,18 @@ export default function OperacaoPedidos() {
                           >
                             Cancelar
                           </button>
+                        )}
+                        {/* Recuperação: comanda saiu borrada, acabou o papel, agente estava
+                            desligado. Pedido cancelado não se reimprime. */}
+                        {order.status !== "CANCELADO" && (
+                          <>
+                            <BotaoImprimir onImprimir={() => impressaoService.comanda(order.id)}>
+                              Comanda
+                            </BotaoImprimir>
+                            <BotaoImprimir onImprimir={() => impressaoService.cupom(order.id)}>
+                              Cupom
+                            </BotaoImprimir>
+                          </>
                         )}
                       </div>
                     </td>

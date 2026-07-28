@@ -20,6 +20,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { useAdminAuth } from "../../context/AdminAuthContext";
+import StatusAgenteImpressao from "../StatusAgenteImpressao";
 import {
   OPERACAO_ROLES,
   OPERACAO_COM_MOTOBOY_ROLES,
@@ -169,6 +170,10 @@ export default function Sidebar() {
       </nav>
 
       <div className="px-3 py-4 border-t border-flour/10 space-y-3">
+        {/* Sempre visível: se a impressora cair no meio do movimento, o atendente precisa
+            descobrir na hora, não quando a cozinha reclamar. */}
+        <StatusAgenteImpressao collapsed={collapsed} />
+
         <button
           onClick={toggleCollapsed}
           className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-flour/70 hover:text-flour hover:bg-flour/10 transition w-full ${

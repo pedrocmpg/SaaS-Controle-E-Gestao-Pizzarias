@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { motoboyService } from "../../services/api";
+import { motoboyService, impressaoService } from "../../services/api";
 import { useAdminAuth } from "../../context/AdminAuthContext";
+import BotaoImprimir from "../../components/BotaoImprimir";
 
 const inputClass =
   "w-full border border-flour-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-char";
@@ -308,15 +309,22 @@ export default function OperacaoMotoboyTurno() {
                 </span>
               </p>
 
-              {h.status === "FECHADO_AGUARDANDO_CONFERENCIA" && podeConferir && (
-                <button
-                  onClick={() => conferir(h.id)}
-                  disabled={busy}
-                  className="text-xs px-3 py-1.5 rounded-full border border-flour-2 text-ink-soft hover:text-char mt-2 disabled:opacity-50"
-                >
-                  Conferir
-                </button>
-              )}
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                {h.status === "FECHADO_AGUARDANDO_CONFERENCIA" && podeConferir && (
+                  <button
+                    onClick={() => conferir(h.id)}
+                    disabled={busy}
+                    className="text-xs px-3 py-1.5 rounded-full border border-flour-2 text-ink-soft hover:text-char disabled:opacity-50"
+                  >
+                    Conferir
+                  </button>
+                )}
+                {/* O romaneio já sai sozinho no fechamento; aqui é a 2ª via, para quando o
+                    papel se perde ou a impressora estava desligada na hora do acerto. */}
+                <BotaoImprimir onImprimir={() => impressaoService.romaneio(h.id)}>
+                  Reimprimir romaneio
+                </BotaoImprimir>
+              </div>
             </div>
           ))}
         </div>

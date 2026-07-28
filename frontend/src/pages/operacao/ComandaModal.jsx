@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { salaoService, pdvConfigService, catalogService } from "../../services/api";
+import { salaoService, pdvConfigService, catalogService, impressaoService } from "../../services/api";
 import MontadorPizzaModal from "./MontadorPizzaModal";
 
 const PAYMENT_METHODS = [
@@ -132,7 +132,11 @@ export default function ComandaModal({ comandaId, onClose, onClosed }) {
     setError(null);
     try {
       await salaoService.fecharComanda(comandaId, paymentMethod);
-      onClosed?.();
+      // Cupom do salão sai junto com o fechamento. Falha de impressão não invalida a venda,
+      // que já está fechada — por isso o catch silencioso aqui; o erro fica no log do agente
+      // e o cupom pode ser reimpresso pela tela do salão.
+      impressaoService.cupomComanda(comandaId).catch(() => {});
+      onClosed?.(comandaId);
     } catch (err) {
       setError(err.response?.data?.error || "Não foi possível fechar a comanda.");
     } finally {

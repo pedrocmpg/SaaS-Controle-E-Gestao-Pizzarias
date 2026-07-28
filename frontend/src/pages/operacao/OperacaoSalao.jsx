@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { salaoService, pdvConfigService } from "../../services/api";
+import { salaoService, pdvConfigService, impressaoService } from "../../services/api";
+import BotaoImprimir from "../../components/BotaoImprimir";
 import ComandaModal from "./ComandaModal";
 
 export default function OperacaoSalao() {
@@ -10,6 +11,7 @@ export default function OperacaoSalao() {
   const [comandaId, setComandaId] = useState(null);
   const [numeroInput, setNumeroInput] = useState("");
   const [abrindo, setAbrindo] = useState(false);
+  const [ultimaFechadaId, setUltimaFechadaId] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -47,8 +49,11 @@ export default function OperacaoSalao() {
     abrirComanda(numero);
   }
 
-  function handleComandaClosed() {
+  function handleComandaClosed(fechadaId) {
     setComandaId(null);
+    // Guarda a última fechada só para oferecer a 2ª via: a comanda some da grade ao fechar
+    // (a grade lista as abertas), e sem isso não haveria de onde reimprimir o cupom.
+    setUltimaFechadaId(fechadaId ?? null);
     load();
   }
 
@@ -62,6 +67,18 @@ export default function OperacaoSalao() {
         <p className="text-red-500 mb-4 cursor-pointer text-sm" onClick={() => setError(null)}>
           {error} (clique para dispensar)
         </p>
+      )}
+
+      {ultimaFechadaId && (
+        <div className="card p-3 mb-6 flex items-center gap-3 flex-wrap">
+          <span className="text-sm text-ink-soft">Comanda #{ultimaFechadaId} fechada. O cupom foi enviado à impressora.</span>
+          <BotaoImprimir onImprimir={() => impressaoService.cupomComanda(ultimaFechadaId)}>
+            Reimprimir cupom
+          </BotaoImprimir>
+          <button onClick={() => setUltimaFechadaId(null)} className="text-xs text-ink-soft hover:text-char underline">
+            dispensar
+          </button>
+        </div>
       )}
 
       {!loading && (
