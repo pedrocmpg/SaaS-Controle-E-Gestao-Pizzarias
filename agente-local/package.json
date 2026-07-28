@@ -1,0 +1,20 @@
+{
+  "name": "hub-pizzarias-agente-impressao",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Agente local de impressao termica do Hub de Gestao para Pizzarias. Roda no PC do caixa e imprime os pedidos na impressora ESC/POS.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "testar-impressora": "node src/testar-impressora.js"
+  },
+  "dependencies": {
+    "axios": "^1.18.1",
+    "dotenv": "^16.4.5",
+    "node-thermal-printer": "^4.6.0",
+    "socket.io-client": "^4.8.3"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

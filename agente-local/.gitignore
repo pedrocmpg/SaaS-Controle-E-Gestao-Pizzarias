@@ -1,0 +1,9 @@
+node_modules/
+
+# Configuração da pizzaria: contém o token da loja, nunca vai para o repositório.
+.env
+
+# Estado local do agente, gerado em runtime.
+fila.json
+agente.log
+agente.log.anterior
