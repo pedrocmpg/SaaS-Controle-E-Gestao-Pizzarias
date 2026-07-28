@@ -95,6 +95,20 @@ enum FormaPagamento {
   CARTAO_DEBITO
 }
 
+/// O que está sendo impresso. Determina o layout e, no diagnóstico, qual tabela
+/// consultar a partir de JobImpressao.origemId.
+enum TipoImpressao {
+  COMANDA_COZINHA
+  CUPOM_CLIENTE
+  ROMANEIO_MOTOBOY
+}
+
+enum StatusImpressao {
+  PENDENTE
+  IMPRESSO
+  ERRO
+}
+
 /// Categoria de valor extra lançado no turno do motoboy (além de entregas + aluguel)
 enum TipoExtraMotoboy {
   ENTREGA_LONGA
@@ -670,8 +684,39 @@ model Loja {
   lojaConfig    LojaConfig?
   gruposPdv     GrupoPDV[]
   botoesPdv     BotaoPDV[]
+  jobsImpressao JobImpressao[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
   @@map("lojas")
+}
+
+/// Job de impressão térmica. Persistido para permitir reimpressão e diagnóstico
+/// ("o pedido 412 saiu na cozinha?") sem depender de o agente local estar online.
+///
+/// A impressora é USB/rede dentro da pizzaria e o backend roda na nuvem: quem imprime é o
+/// agente local, que consome esta fila via WebSocket (e via GET /pendentes no reconnect).
+model JobImpressao {
+  id     Int  @id @default(autoincrement())
+  lojaId Int
+  loja   Loja @relation(fields: [lojaId], references: [id])
+
+  tipo   TipoImpressao
+  status StatusImpressao @default(PENDENTE)
+
+  /// Texto já renderizado em linhas pelo backend — o agente não conhece regra de negócio,
+  /// só converte para ESC/POS. Formato: { titulo, linhas: [{ texto, estilo }] }.
+  payload Json
+
+  /// Referência solta à origem (Order.id, Comanda.id ou TurnoMotoboy.id), sem FK:
+  /// o job sobrevive à origem e o `tipo` diz qual tabela consultar.
+  origemId Int?
+
+  tentativas Int       @default(0)
+  erro       String?
+  impressoEm DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([lojaId, status])
+  @@map("jobs_impressao")
 }
