@@ -3,7 +3,7 @@
 Guia de contexto para o Claude Code trabalhar neste projeto. Leia isto antes de mexer em
 qualquer módulo.
 
-> **Última verificação contra o código: 2026-07-27.** Este arquivo já esteve
+> **Última verificação contra o código: 2026-07-28.** Este arquivo já esteve
 > significativamente desatualizado no passado (descrevia como "pendente" coisa que já
 > estava pronta, causando retrabalho). Se você encontrar divergência entre este arquivo e
 > o código, **o código vence** — e atualize este arquivo na mesma sessão.
@@ -34,11 +34,10 @@ Ponto mais importante do projeto, não pode ser esquecido em nenhuma decisão de
 `resolveLojaId` (`backend/src/lib/lojaScope.js`), consumido pelo middleware `attachLojaId`
 que cada arquivo de rotas define. Nunca assumir dado global.
 
-**Risco ativo conhecido:** `resolveLojaId` tem um `fallbackToFirst` que, quando não
-consegue resolver a loja, cai silenciosamente na loja de **menor id**. Inofensivo com uma
-loja só; vira vazamento entre tenants com duas. Corrigido pelo
-[spec-6](specs/spec-6-fundacao-multitenant-e-integridade-financeira.md) — **não vender
-para a segunda pizzaria antes disso**.
+O `fallbackToFirst` que caía silenciosamente na loja de menor id **foi removido**
+(spec-6, 2026-07-28): hoje, loja não resolvida = 400 + log de segurança, nunca um palpite.
+Os testes em `lib/__tests__/lojaScope.test.js` existem para travar essa regra — se algum
+deles começar a falhar, é sinal de que o fallback voltou.
 
 ## Stack real
 
@@ -48,7 +47,11 @@ para a segunda pizzaria antes disso**.
 - **Banco:** PostgreSQL puro via `DATABASE_URL`. **NÃO usa Supabase Auth nem Supabase
   Storage** (se alguma doc antiga disser isso, está errada — não confundir com o projeto
   FluxCash, que usa Supabase de verdade).
+- **Agente local:** `agente-local/` — projeto Node **separado** (package.json próprio, não
+  é workspace do backend). Roda no PC do caixa da pizzaria e imprime na térmica via
+  ESC/POS. Distribuído ao cliente, não deployado.
 - **Pacotes:** npm (`npm run dev` em `backend/` e `frontend/`)
+- **Testes:** Vitest no backend (`npm test` em `backend/`), CI no GitHub Actions.
 
 ## Autenticação e autorização
 
@@ -67,7 +70,7 @@ para a segunda pizzaria antes disso**.
 
 ## Estado real dos módulos
 
-Os 3 módulos estão **implementados** (schema + rotas + telas). O gargalo hoje **não é
+Os 4 módulos estão **implementados** (schema + rotas + telas). O gargalo hoje **não é
 construção de base** — é profundidade funcional e validação.
 
 ### 1. Pedidos / Tele-entrega — ✅ implementado
@@ -92,7 +95,19 @@ construção de base** — é profundidade funcional e validação.
   abrir → movimentos → fechar → conferir.
 - Caixa do salão e da tele-entrega são **fundos separados** (`TipoCaixa`).
 
-### 3. Motoboy — ✅ implementado, ⚠️ **não validado**
+### 3. Impressão térmica — ✅ implementado, ⚠️ **nunca imprimiu em papel real**
+- Fila `JobImpressao` no banco + rotas em `impressao.routes.js`. Layout renderizado no
+  **backend** (`lib/impressaoLayout.js`, função pura com testes) — o agente não conhece
+  regra de negócio, só traduz estilo → ESC/POS.
+- **Disparo é automático**, não botão: criar pedido → comanda de cozinha;
+  `SAIU_PARA_ENTREGA` → cupom do cliente; fechar turno → romaneio. Os botões de reimprimir
+  existem só como recuperação.
+- Agente local em `agente-local/` (projeto Node separado, distribuído à pizzaria). Conecta
+  como cliente no WebSocket — não abre porta, não exige mexer em firewall/NAT.
+- Cupons levam **"DOCUMENTO NAO FISCAL"** obrigatoriamente (emissão fiscal é fora de escopo).
+- **Falta validar com impressora física.** Nada nunca saiu em papel de verdade.
+
+### 4. Motoboy — ✅ implementado, ⚠️ **não validado**
 - `TurnoMotoboy` + `ExtraMotoboy`, rotas em `motoboy.routes.js`, telas
   `OperacaoDespacho.jsx` e `OperacaoMotoboyTurno.jsx`. Migration aplicada em produção em
   2026-07-16.
@@ -107,11 +122,8 @@ construção de base** — é profundidade funcional e validação.
 
 Ver [`specs/README.md`](specs/README.md) para o índice completo e o caminho crítico.
 
-1. **[spec-6](specs/spec-6-fundacao-multitenant-e-integridade-financeira.md)** — fundação:
-   matar o fallback de `lojaId`, transacionalidade nos fechamentos, testes das fórmulas
-   financeiras, enum de forma de pagamento. **Bloqueia tudo.**
-2. **[spec-7](specs/spec-7-impressao-termica.md)** — impressão térmica via agente local.
-   Bloqueador comercial.
+1. ~~**spec-6** — fundação multi-tenant e integridade financeira.~~ ✅ feito em 2026-07-28.
+2. ~~**spec-7** — impressão térmica via agente local.~~ ✅ feito em 2026-07-28.
 3. **[spec-8](specs/spec-8-clientes-e-kds.md)** — tela de clientes (CRM) e KDS de cozinha.
 4. **[spec-9](specs/spec-9-onboarding-assinatura-e-controle-interno.md)** — onboarding de
    loja, assinatura, e correção do controle interno do motoboy.
@@ -120,16 +132,18 @@ Ver [`specs/README.md`](specs/README.md) para o índice completo e o caminho cr�
 
 ## Riscos técnicos conhecidos (não corrigidos ainda)
 
-- **Zero testes automatizados e zero CI** em ~8.600 linhas que calculam dinheiro real
-  entre pizzaria, motoboys e clientes. Maior risco técnico do projeto. Endereçado no spec-6.
-- **Fechamentos financeiros não são transacionais** (`caixa`, `motoboy`, `comanda`) — duplo
-  clique pode recalcular. Endereçado no spec-6.
 - **Motoboy pode fechar o próprio turno** e lançar os próprios extras (`MOTOBOY` está em
   `TURNO_MOTOBOY_ROLES`). Furo de controle interno. Endereçado no spec-9.
-- **Não existe impressão** de nada. Endereçado no spec-7.
 - **Não existe assinatura/onboarding** — adicionar uma loja hoje é `INSERT` manual.
   Endereçado no spec-9.
-- `attachLojaId` está **duplicado** em 5 arquivos de rotas. Unificado no spec-6.
+- **A impressão nunca rodou em impressora física.** O caminho backend → fila → agente está
+  testado, mas ESC/POS em papel real só se valida instalando no PC do piloto.
+- Cobertura de teste é dos **cálculos e layouts** (`lib/`, 48 testes). Rotas Express e
+  frontend seguem sem teste automatizado.
+
+Resolvidos no spec-6 (2026-07-28): fallback silencioso de `lojaId`, ausência de testes/CI,
+não-transacionalidade dos fechamentos, e a duplicação de `attachLojaId` (que estava em 6
+arquivos, não 5).
 
 ## Fora de escopo (não construir sem pedir)
 
