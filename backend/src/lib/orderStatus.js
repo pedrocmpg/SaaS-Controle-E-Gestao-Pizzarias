@@ -37,10 +37,37 @@ function isValidTransition(from, to) {
   return getNextStatus(from) === to; // só o próximo do fluxo
 }
 
+/**
+ * Traduz o parâmetro `status` da listagem em filtro Prisma.
+ *
+ * Aceita um valor ("RECEBIDO") ou vários separados por vírgula
+ * ("RECEBIDO,EM_PREPARO") — o KDS da cozinha monta suas colunas numa só
+ * requisição em vez de uma por status.
+ *
+ * Status desconhecidos são descartados em silêncio: um filtro inválido não pode
+ * virar `where.status = undefined` (que o Prisma ignora, devolvendo TODOS os
+ * pedidos). Se nada sobrar, retorna null e o chamador não filtra por status.
+ *
+ * @param {string|undefined} status
+ * @returns {object|string|null} valor de `where.status`, ou null para não filtrar.
+ */
+function parseStatusFilter(status) {
+  if (!status) return null;
+  const solicitados = String(status)
+    .split(",")
+    .map((s) => s.trim().toUpperCase())
+    .filter((s) => ALL_STATUSES.includes(s));
+
+  if (solicitados.length === 0) return null;
+  if (solicitados.length === 1) return solicitados[0];
+  return { in: [...new Set(solicitados)] };
+}
+
 module.exports = {
   STATUS_FLOW,
   ALL_STATUSES,
   TERMINAL_STATUSES,
   getNextStatus,
   isValidTransition,
+  parseStatusFilter,
 };

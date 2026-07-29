@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   ClipboardList,
+  ChefHat,
   UtensilsCrossed,
   Wallet,
   Bike,
@@ -37,6 +38,9 @@ const NAV_SECTIONS = [
     label: "Operação",
     items: [
       { to: "/operacao/pedidos", label: "Pedidos", icon: ClipboardList, roles: OPERACAO_ROLES },
+      // Abre em outra aba: é a tela de TV da cozinha. Trocar a aba atual por ela
+      // tiraria o atendente de onde ele estava trabalhando.
+      { to: "/operacao/cozinha", label: "Cozinha (KDS)", icon: ChefHat, roles: OPERACAO_ROLES, novaAba: true },
       { to: "/operacao/salao", label: "Salão", icon: UtensilsCrossed, roles: OPERACAO_ROLES },
       { to: "/operacao/caixa", label: "PDV/Caixa", icon: Wallet, roles: OPERACAO_ROLES },
       { to: "/operacao/despacho", label: "Despacho motoboy", icon: Bike, roles: OPERACAO_ROLES },
@@ -153,6 +157,8 @@ export default function Sidebar() {
                     <Link
                       key={item.to}
                       to={item.to}
+                      target={item.novaAba ? "_blank" : undefined}
+                      rel={item.novaAba ? "noreferrer" : undefined}
                       title={collapsed ? item.label : undefined}
                       className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition ${
                         collapsed ? "justify-center" : ""

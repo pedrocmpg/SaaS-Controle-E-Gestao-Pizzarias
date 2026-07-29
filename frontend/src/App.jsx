@@ -25,9 +25,10 @@ import OperacaoSalao from "./pages/operacao/OperacaoSalao";
 import OperacaoCaixa from "./pages/operacao/OperacaoCaixa";
 import OperacaoDespacho from "./pages/operacao/OperacaoDespacho";
 import OperacaoMotoboyTurno from "./pages/operacao/OperacaoMotoboyTurno";
+import OperacaoCozinha from "./pages/operacao/OperacaoCozinha";
 import { AdminAuthProvider } from "./context/AdminAuthContext";
 import { ToastProvider } from "./components/ui";
-import { OPERACAO_COM_MOTOBOY_ROLES, GERENCIA_ROLES, SUPER_ADMIN_ONLY } from "./constants/roles";
+import { OPERACAO_ROLES, OPERACAO_COM_MOTOBOY_ROLES, GERENCIA_ROLES, SUPER_ADMIN_ONLY } from "./constants/roles";
 
 export default function App() {
   return (
@@ -50,6 +51,21 @@ export default function App() {
           element={
             <AdminAuthProvider>
               <AdminLogin />
+            </AdminAuthProvider>
+          }
+        />
+
+        {/* KDS da cozinha: fica FORA do AppShell de propósito. É uma tela de
+            TV/tablet pendurada na parede — sidebar e header roubariam área útil
+            e nada ali é navegável com a mão suja de farinha. Autenticada como
+            as demais (spec-8). */}
+        <Route
+          path="/operacao/cozinha"
+          element={
+            <AdminAuthProvider>
+              <AdminRoute allowedRoles={OPERACAO_ROLES}>
+                <OperacaoCozinha />
+              </AdminRoute>
             </AdminAuthProvider>
           }
         />

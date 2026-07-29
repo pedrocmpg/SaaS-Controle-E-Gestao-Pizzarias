@@ -8,7 +8,7 @@ const { orderLimiter, adminReadLimiter, adminWriteLimiter } = require("../middle
 const validateRequest = require("../middleware/validateRequest");
 const { createOrderSchema, updateOrderStatusSchema } = require("../validators/schemas");
 const { logSecurityEvent } = require("../lib/securityLogger");
-const { ALL_STATUSES, isValidTransition } = require("../lib/orderStatus");
+const { isValidTransition, parseStatusFilter } = require("../lib/orderStatus");
 const { emitPedidoNovo, emitPedidoStatus, emitDespachoAtribuido, emitDespachoEntregue } = require("../lib/socket");
 const { logAuditChange } = require("../middleware/auditLogger");
 const { enfileirarComandaCozinha, enfileirarCupomPedido } = require("../lib/impressao");
@@ -17,8 +17,6 @@ const router = express.Router();
 
 // Roles que podem operar pedidos (ver + mudar status)
 const ORDER_ROLES = ["SUPER_ADMIN", "ADMIN", "GERENTE", "ATENDENTE"];
-
-const VALID_STATUSES = ALL_STATUSES;
 
 /**
  * POST /api/orders
@@ -177,10 +175,11 @@ router.get("/", requireAuth, requireAnyRole(...ORDER_ROLES), adminReadLimiter, a
     const pageNum = Math.max(1, parseInt(page) || 1);
     const pageSizeNum = Math.min(100, Math.max(1, parseInt(pageSize) || 20)); // máx 100
 
+    // Aceita "RECEBIDO" ou "RECEBIDO,EM_PREPARO" (o KDS monta as colunas numa
+    // só requisição). Ver parseStatusFilter — é função pura, com teste.
     const where = {};
-    if (status && VALID_STATUSES.includes(String(status).toUpperCase())) {
-      where.status = String(status).toUpperCase();
-    }
+    const statusFilter = parseStatusFilter(status);
+    if (statusFilter) where.status = statusFilter;
     // Isolamento: operador vinculado só vê a própria loja; SUPER_ADMIN global pode filtrar por ?lojaId.
     if (req.admin.lojaId != null) {
       where.lojaId = req.admin.lojaId;
