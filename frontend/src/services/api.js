@@ -83,6 +83,12 @@ export const ordersService = {
   lookupCliente: (phone) => api.get("/orders/cliente/lookup", { params: { phone } }).then((r) => r.data),
 };
 
+export const clientesService = {
+  list: (params) => api.get("/clientes", { params }).then((r) => r.data),
+  getById: (id) => api.get(`/clientes/${id}`).then((r) => r.data),
+  inativos: (dias) => api.get("/clientes/inativos", { params: { dias } }).then((r) => r.data),
+};
+
 export const salaoService = {
   listComandas: (params) => api.get("/salao/comandas", { params }).then((r) => r.data),
   abrirComanda: (numeroMesa) => api.post("/salao/comandas/abrir", numeroMesa != null ? { numeroMesa } : {}).then((r) => r.data),

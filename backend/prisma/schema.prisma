@@ -288,18 +288,30 @@ model Order {
 /// Isolado por lojaId: o mesmo telefone em lojas diferentes = clientes diferentes.
 /// phoneHash é determinístico (HMAC) só para permitir busca; endereço fica criptografado.
 model Cliente {
-  id        Int      @id @default(autoincrement())
-  lojaId    Int
-  loja      Loja     @relation(fields: [lojaId], references: [id])
-  phoneHash String // HMAC-SHA256 do telefone normalizado (determinístico, pesquisável)
-  name      String
-  address   String? // Criptografado no banco (mesmo tratamento de Order.address)
-  pedidos   Order[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         Int      @id @default(autoincrement())
+  lojaId     Int
+  loja       Loja     @relation(fields: [lojaId], references: [id])
+  phoneHash  String // HMAC-SHA256 do telefone normalizado (determinístico, pesquisável)
+  name       String
+  // Telefone criptografado (mesmo tratamento de address e Order.phone). phoneHash é
+  // irreversível, então sem esta coluna não há como EXIBIR o telefone do cliente —
+  // só verificar se um telefone digitado bate. Nullable por causa dos clientes
+  // criados antes desta migration; o upsert do pedido preenche no próximo contato.
+  phone      String?
+  // Últimos 4 dígitos EM CLARO. phone é AES com IV aleatório (duas cifras diferentes
+  // para o mesmo número), então não existe LIKE sobre ele. Sem esta coluna, buscar
+  // "o cliente do 1234" seria impossível — e é assim que o atendente procura.
+  // 4 dígitos sozinhos não identificam ninguém; o número completo continua cifrado.
+  phoneLast4 String?
+  address    String? // Criptografado no banco (mesmo tratamento de Order.address)
+  pedidos    Order[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@unique([lojaId, phoneHash])
   @@index([lojaId])
+  @@index([lojaId, name]) // lista do CRM: ordena/filtra por nome dentro da loja
+  @@index([lojaId, phoneLast4]) // busca "o cliente do 1234"
   @@map("clientes")
 }
 

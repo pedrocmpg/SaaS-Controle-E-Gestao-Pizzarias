@@ -13,6 +13,7 @@ import {
   Tag,
   Grid3x3,
   Users,
+  Contact,
   Receipt,
   Banknote,
   BarChart3,
@@ -45,6 +46,7 @@ const NAV_SECTIONS = [
       { to: "/operacao/caixa", label: "PDV/Caixa", icon: Wallet, roles: OPERACAO_ROLES },
       { to: "/operacao/despacho", label: "Despacho motoboy", icon: Bike, roles: OPERACAO_ROLES },
       { to: "/operacao/motoboy", label: "Motoboy", icon: Truck, roles: OPERACAO_COM_MOTOBOY_ROLES },
+      { to: "/operacao/clientes", label: "Clientes", icon: Contact, roles: GERENCIA_ROLES },
     ],
   },
   {

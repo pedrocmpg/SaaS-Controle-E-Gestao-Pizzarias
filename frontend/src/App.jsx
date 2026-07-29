@@ -26,6 +26,7 @@ import OperacaoCaixa from "./pages/operacao/OperacaoCaixa";
 import OperacaoDespacho from "./pages/operacao/OperacaoDespacho";
 import OperacaoMotoboyTurno from "./pages/operacao/OperacaoMotoboyTurno";
 import OperacaoCozinha from "./pages/operacao/OperacaoCozinha";
+import OperacaoClientes from "./pages/operacao/OperacaoClientes";
 import { AdminAuthProvider } from "./context/AdminAuthContext";
 import { ToastProvider } from "./components/ui";
 import { OPERACAO_ROLES, OPERACAO_COM_MOTOBOY_ROLES, GERENCIA_ROLES, SUPER_ADMIN_ONLY } from "./constants/roles";
@@ -147,6 +148,16 @@ export default function App() {
           <Route path="operacao/caixa/sangrias" element={<OperacaoCaixa />} />
           <Route path="operacao/despacho" element={<OperacaoDespacho />} />
           <Route path="operacao/motoboy" element={<OperacaoMotoboyTurno />} />
+          {/* Visão agregada do cliente é gerencial — o atendente já tem o lookup
+              por telefone no momento do pedido. Mesmas roles do backend. */}
+          <Route
+            path="operacao/clientes"
+            element={
+              <AdminRoute allowedRoles={GERENCIA_ROLES}>
+                <OperacaoClientes />
+              </AdminRoute>
+            }
+          />
           <Route
             path="operacao/relatorio"
             element={

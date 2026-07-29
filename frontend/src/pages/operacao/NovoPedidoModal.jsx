@@ -17,20 +17,27 @@ const inputClass =
  * Reaproveita o catálogo (catalogService) e o PizzaBuilderModal (via onAdd),
  * mantendo os itens numa lista local — sem tocar no carrinho da vitrine pública.
  */
-export default function NovoPedidoModal({ onClose, onCreated }) {
+/**
+ * `inicial` (opcional) pré-preenche o formulário — usado por "Repetir último
+ * pedido" na tela de clientes (spec-8). Sem ela, o modal abre vazio como sempre.
+ * Só semeia o estado inicial: depois de aberto, o atendente edita à vontade.
+ */
+export default function NovoPedidoModal({ onClose, onCreated, inicial }) {
   const [catalog, setCatalog] = useState({ pizzaSizes: [], flavors: [], borders: [], products: [] });
   const [loadingCatalog, setLoadingCatalog] = useState(true);
 
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState(inicial?.items || []);
   const [builderSize, setBuilderSize] = useState(null);
 
-  const [customerName, setCustomerName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [deliveryType, setDeliveryType] = useState("ENTREGA");
-  const [address, setAddress] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("DINHEIRO");
-  const [deliveryFee, setDeliveryFee] = useState("");
-  const [notes, setNotes] = useState("");
+  const [customerName, setCustomerName] = useState(inicial?.customerName || "");
+  const [phone, setPhone] = useState(inicial?.phone || "");
+  const [deliveryType, setDeliveryType] = useState(inicial?.deliveryType || "ENTREGA");
+  const [address, setAddress] = useState(inicial?.address || "");
+  const [paymentMethod, setPaymentMethod] = useState(inicial?.paymentMethod || "DINHEIRO");
+  const [deliveryFee, setDeliveryFee] = useState(
+    inicial?.deliveryFee != null ? String(inicial.deliveryFee) : ""
+  );
+  const [notes, setNotes] = useState(inicial?.notes || "");
 
   const [lookupStatus, setLookupStatus] = useState(null); // null | "found" | "new"
   const [submitting, setSubmitting] = useState(false);

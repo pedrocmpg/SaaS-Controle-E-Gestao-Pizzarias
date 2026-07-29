@@ -1,6 +1,6 @@
 const express = require("express");
 const prisma = require("../lib/prisma");
-const { encrypt, decrypt, hashPhone } = require("../lib/encryption");
+const { encrypt, decrypt, hashPhone, normalizePhone } = require("../lib/encryption");
 const attachLojaId = require("../middleware/attachLojaId");
 const { requireAuth } = require("../middleware/auth");
 const { requireAnyRole } = require("../middleware/authorization");
@@ -65,16 +65,26 @@ router.post("/", requireAuth, requireAnyRole(...ORDER_ROLES), adminWriteLimiter,
     const phoneHash = hashPhone(phone);
     let cliente = null;
     if (phoneHash) {
+      // phone cifrado (para EXIBIR na tela de clientes) e os 4 últimos dígitos em
+      // claro (para BUSCAR por final) — phoneHash sozinho só responde "é este
+      // número?", nunca "qual é o número?". Ver spec-8.
+      const digitos = normalizePhone(phone);
+      const phoneLast4 = digitos.length >= 4 ? digitos.slice(-4) : null;
+
       cliente = await prisma.cliente.upsert({
         where: { lojaId_phoneHash: { lojaId, phoneHash } },
         update: {
           name: customerName,
+          phone: encrypt(phone),
+          phoneLast4,
           ...(address ? { address: encrypt(address) } : {}),
         },
         create: {
           lojaId,
           phoneHash,
           name: customerName,
+          phone: encrypt(phone),
+          phoneLast4,
           address: address ? encrypt(address) : null,
         },
       });
