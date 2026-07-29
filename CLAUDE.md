@@ -3,7 +3,7 @@
 Guia de contexto para o Claude Code trabalhar neste projeto. Leia isto antes de mexer em
 qualquer módulo.
 
-> **Última verificação contra o código: 2026-07-28.** Este arquivo já esteve
+> **Última verificação contra o código: 2026-07-29.** Este arquivo já esteve
 > significativamente desatualizado no passado (descrevia como "pendente" coisa que já
 > estava pronta, causando retrabalho). Se você encontrar divergência entre este arquivo e
 > o código, **o código vence** — e atualize este arquivo na mesma sessão.
@@ -122,13 +122,31 @@ construção de base** — é profundidade funcional e validação.
   aberta do projeto — e não é de código. Os testes provam que o código calcula o que foi
   especificado; **não** provam que a especificação é o que a pizzaria faz.
 
+### 5. Clientes (CRM) e KDS de cozinha — ✅ implementado (spec-8, 2026-07-29)
+- **CRM:** `clientes.routes.js` + `OperacaoClientes.jsx`. Lista com agregados (nº de
+  pedidos, total gasto, ticket médio, dias sem pedir), filtro de inativos e painel com
+  histórico + "Repetir último pedido" (abre `NovoPedidoModal` pré-preenchido via prop
+  `inicial`). Roles: `GERENCIA_ROLES` — visão agregada é gerencial.
+- **Telefone do cliente:** `Cliente` guardava só `phoneHash` (HMAC irreversível). O spec-8
+  agora tem `phone` cifrado (para **exibir**) e `phoneLast4` em claro (para **buscar por
+  final**). `phoneLast4` existe porque `phone` usa IV aleatório — não há `LIKE` sobre a
+  cifra. Busca por número completo casa por `phoneHash`.
+- Agregação/mascaramento em `lib/clientes.js` (função pura, 23 testes). Invariante travado:
+  pedido `CANCELADO` não entra em faturamento, mas conta para "dias sem pedir".
+- **KDS:** `OperacaoCozinha.jsx` em `/operacao/cozinha`, **fora do `AppShell`** (tela de TV,
+  sem sidebar). Três colunas com tempo colorido, socket reaproveitado, recarrega no
+  reconnect. A cozinha avança só `RECEBIDO → EM_PREPARO`: `SAIU_PARA_ENTREGA` exige motoboy
+  com turno aberto, e quem despacha é a tela de Despacho.
+- `GET /api/orders?status=` aceita múltiplos status separados por vírgula
+  (`parseStatusFilter`, função pura testada).
+
 ## Backlog priorizado
 
 Ver [`specs/README.md`](specs/README.md) para o índice completo e o caminho crítico.
 
 1. ~~**spec-6** — fundação multi-tenant e integridade financeira.~~ ✅ feito em 2026-07-28.
 2. ~~**spec-7** — impressão térmica via agente local.~~ ✅ feito em 2026-07-28.
-3. **[spec-8](specs/spec-8-clientes-e-kds.md)** — tela de clientes (CRM) e KDS de cozinha.
+3. ~~**spec-8** — tela de clientes (CRM) e KDS de cozinha.~~ ✅ feito em 2026-07-29.
 4. **[spec-9](specs/spec-9-onboarding-assinatura-e-controle-interno.md)** — onboarding de
    loja, assinatura, e correção do controle interno do motoboy.
 5. **[spec-10](specs/spec-10-estoque-e-ficha-tecnica.md)** — estoque/CMV. Só após validar
@@ -142,7 +160,7 @@ Ver [`specs/README.md`](specs/README.md) para o índice completo e o caminho cr�
   Endereçado no spec-9.
 - **A impressão nunca rodou em impressora física.** O caminho backend → fila → agente está
   testado, mas ESC/POS em papel real só se valida instalando no PC do piloto.
-- Cobertura de teste é dos **cálculos e layouts** (`lib/`, 48 testes). Rotas Express e
+- Cobertura de teste é dos **cálculos e layouts** (`lib/`, 86 testes). Rotas Express e
   frontend seguem sem teste automatizado.
 
 Resolvidos no spec-6 (2026-07-28): fallback silencioso de `lojaId`, ausência de testes/CI,

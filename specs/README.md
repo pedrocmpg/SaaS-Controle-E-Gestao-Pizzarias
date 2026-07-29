@@ -19,7 +19,7 @@ priorizado, gerado a partir da revisão de código de 2026-07-27.
 |---|---|---|---|---|
 | ~~1~~ | ~~[spec-6 — Fundação multi-tenant e integridade financeira](spec-6-fundacao-multitenant-e-integridade-financeira.md)~~ | 1–1,5 dia | — | ✅ **Implementado em 2026-07-28.** |
 | ~~2~~ | ~~[spec-7 — Impressão térmica](spec-7-impressao-termica.md)~~ | 2–3 dias | spec-6 | ✅ **Implementado em 2026-07-28.** Falta validar com impressora física no piloto. |
-| 3 | [spec-8 — Clientes (CRM) e KDS](spec-8-clientes-e-kds.md) | 2 dias | spec-6 | Maior valor percebido por esforço — o dado e o WebSocket já existem e estão ociosos. |
+| ~~3~~ | ~~[spec-8 — Clientes (CRM) e KDS](spec-8-clientes-e-kds.md)~~ | 2 dias | spec-6 | ✅ **Implementado em 2026-07-29.** Migration aplicada em produção. |
 | 4 | [spec-9 — Onboarding, assinatura e controle interno](spec-9-onboarding-assinatura-e-controle-interno.md) | 3 dias | spec-6 | Necessário antes do 2º cliente pagante. Inclui correção de controle interno do motoboy. |
 | 5 | [spec-10 — Estoque e ficha técnica](spec-10-estoque-e-ficha-tecnica.md) | 1–2 semanas | spec-6, spec-8 | Dor real e sustenta a mensalidade a longo prazo, mas caro e depende de validação com o piloto. |
 
@@ -28,13 +28,25 @@ priorizado, gerado a partir da revisão de código de 2026-07-27.
 ```
 spec-6 (fundação)      ✅ feito
    ├──> spec-7 (impressão) ✅ feito ─┐
-   ├──> spec-8 (CRM + KDS) ──────────┼──> LANÇAMENTO REAL NO PILOTO
+   ├──> spec-8 (CRM + KDS) ✅ feito ─┼──> LANÇAMENTO REAL NO PILOTO
    └──> spec-9 (onboarding) ─────────┴──> 2º CLIENTE PAGANTE
                                         └──> spec-10 (estoque, após validação)
 ```
 
-Specs 8 e 9 são independentes entre si — podem ser feitas em qualquer ordem. A ordem
-sugerida acima é por risco comercial.
+**Próxima spec de código: spec-9.** As pendências de validação (turno real do motoboy,
+impressora física) continuam sendo o que de fato destrava o lançamento.
+
+### Desvio do spec-8 ao implementar (2026-07-29)
+
+- **`Cliente` não guardava telefone**, só `phoneHash` (HMAC irreversível) — o spec pedia
+  telefone mascarado na lista sem notar que não havia número para mascarar. Resolvido com
+  duas colunas: `phone` cifrado (exibir) e `phoneLast4` em claro (buscar por final).
+- **Busca parcial por telefone foi implementada**, ao contrário do que o spec dizia
+  ("impossível, não tentar"). É impossível sobre a cifra, não sobre uma coluna dedicada de
+  4 dígitos. Buscar "o cliente do 1234" é como o atendente procura na prática.
+- **O KDS não avança até `SAIU_PARA_ENTREGA`.** Essa transição exige motoboy com turno
+  aberto, e a cozinha não tem essa informação — quem despacha é a tela de Despacho. A
+  cozinha avança só `RECEBIDO → EM_PREPARO`; a terceira coluna é leitura.
 
 **Próximo passo do spec-7 não é código:** o agente local nunca imprimiu em impressora
 física. Instalar no PC do piloto (`agente-local/README.md`) e rodar
